@@ -259,6 +259,51 @@ body.panel-open #dice-log { right: 296px; }
 .log-entry.old { color: var(--gold-dim); font-size: 10px; }
 @keyframes log-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 
+/* ── AVATAR UPLOAD MODAL ── */
+#av-modal {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(0,0,0,0.78); backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center;
+}
+#av-modal.open { display: flex; }
+#av-modal-box {
+  background: rgba(10,6,2,0.97); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px; width: 280px;
+  display: flex; flex-direction: column; gap: 12px;
+  animation: handout-enter 0.25s cubic-bezier(0.34,1.56,0.64,1) both;
+  box-shadow: 0 0 40px rgba(0,0,0,0.8);
+}
+#av-modal-title {
+  font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--gold); text-align: center;
+}
+#av-drop-zone {
+  border: 2px dashed var(--border); border-radius: 8px;
+  padding: 24px 12px; text-align: center;
+  cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+}
+#av-drop-zone:hover, #av-drop-zone.drag-over {
+  border-color: var(--gold-dim); background: rgba(200,169,110,0.06);
+}
+#av-drop-zone span { font-size: 11px; color: var(--text-dim); }
+#av-drop-zone strong { font-family: 'Cinzel', serif; font-size: 10px; color: var(--gold-dim); }
+#av-preview-wrap { display: none; justify-content: center; }
+#av-preview { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid var(--blood); box-shadow: 0 0 16px rgba(139,0,0,0.4); }
+#av-modal-btns { display: flex; gap: 8px; }
+#av-confirm, #av-cancel {
+  flex: 1; padding: 7px; border-radius: 4px; cursor: pointer;
+  font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+#av-confirm { background: rgba(80,20,0,0.7); border: 1px solid var(--border-hot); color: var(--gold); }
+#av-confirm:hover { background: rgba(139,0,0,0.6); }
+#av-confirm:disabled { opacity: 0.35; cursor: default; }
+#av-cancel  { background: rgba(20,12,4,0.7); border: 1px solid var(--border); color: var(--text-dim); }
+#av-cancel:hover { background: rgba(40,24,8,0.8); }
+
+/* ── DRAG-DROP SCENE FEEDBACK ── */
+body.drag-over-scene #backdrop { outline: 3px solid var(--gold-dim); outline-offset: -3px; }
+
 /* ── PEER STATUS ── */
 #peer-status {
   position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
@@ -304,6 +349,22 @@ body.browser-mode #dice-row { left: calc(50% + 95px); }
   <span id="dm-label">DM</span>
 </div>
 <input type="file" id="upload-dm-avatar" accept="image/*" style="display:none">
+
+<!-- AVATAR UPLOAD MODAL -->
+<div id="av-modal">
+  <div id="av-modal-box">
+    <div id="av-modal-title">Set DM Avatar</div>
+    <div id="av-drop-zone">
+      <strong>Drop image here</strong>
+      <span>or click to browse</span>
+    </div>
+    <div id="av-preview-wrap"><img id="av-preview" src="" alt="Preview"></div>
+    <div id="av-modal-btns">
+      <button id="av-confirm" disabled>Set Avatar</button>
+      <button id="av-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- UPPER ZONE — NPCs / Monsters -->
 <div id="upper-zone"></div>
@@ -613,10 +674,18 @@ function renderLibraries() {
 }
 
 function buildLib(containerId, items, clickFn) {
+  const catMap = {'lib-backdrops':'backdrops','lib-players':'players','lib-npcs':'npcs','lib-handouts':'handouts'};
+  const cat = catMap[containerId];
   const grid = el(containerId); grid.innerHTML='';
   items.forEach((item, idx) => {
-    const thumb = document.createElement('div'); thumb.className='res-thumb'; thumb.title=item.name||'';
-    thumb.innerHTML=`<img src="${item.url}" alt=""><span class="res-del">✕</span>`;
+    const thumb = document.createElement('div');
+    thumb.className = 'res-thumb'; thumb.title = item.name||'';
+    thumb.draggable = true;
+    thumb.innerHTML = `<img src="${item.url}" alt="" draggable="false"><span class="res-del">✕</span>`;
+    thumb.addEventListener('dragstart', e => {
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('application/doom-asset', JSON.stringify({url:item.url, name:item.name||'', cat}));
+    });
     thumb.querySelector('img').addEventListener('click', ()=>clickFn(item));
     thumb.querySelector('.res-del').addEventListener('click', e=>{ e.stopPropagation(); removeLib(containerId,idx); });
     grid.appendChild(thumb);
@@ -696,13 +765,80 @@ function renderDiceLog() {
   el('btn-combat').addEventListener('click', () => { if(isHost) send({type:'set_combat', active:!S.combatMode}); });
   el('btn-handout').addEventListener('click', () => { el('upload-handouts').click(); });
 
-  // DM Avatar upload
-  el('dm-av-frame').addEventListener('click', () => { if(isHost) el('upload-dm-avatar').click(); });
+  // DM Avatar — open styled modal
+  let avPendingDataURL = null;
+  el('dm-av-frame').addEventListener('click', () => { if(isHost) openAvModal(); });
+
+  function openAvModal() {
+    avPendingDataURL = null;
+    el('av-preview-wrap').style.display = 'none';
+    el('av-preview').src = '';
+    el('av-confirm').disabled = true;
+    el('av-modal').classList.add('open');
+  }
+
+  function closeAvModal() { el('av-modal').classList.remove('open'); }
+
+  function setAvPreview(dataURL) {
+    avPendingDataURL = dataURL;
+    el('av-preview').src = dataURL;
+    el('av-preview-wrap').style.display = 'flex';
+    el('av-confirm').disabled = false;
+  }
+
+  // Drop zone click → file picker
+  el('av-drop-zone').addEventListener('click', () => el('upload-dm-avatar').click());
+
+  // Drop zone drag events
+  el('av-drop-zone').addEventListener('dragover',  e => { e.preventDefault(); el('av-drop-zone').classList.add('drag-over'); });
+  el('av-drop-zone').addEventListener('dragleave', () => el('av-drop-zone').classList.remove('drag-over'));
+  el('av-drop-zone').addEventListener('drop', async e => {
+    e.preventDefault(); e.stopPropagation();
+    el('av-drop-zone').classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) setAvPreview(await fileToDataURL(f));
+  });
+
   el('upload-dm-avatar').addEventListener('change', async e => {
     const f = e.target.files[0]; if(!f) return;
-    const url = await fileToDataURL(f);
-    send({type:'set_dm_avatar', url});
+    setAvPreview(await fileToDataURL(f));
     e.target.value='';
+  });
+
+  el('av-confirm').addEventListener('click', () => {
+    if (avPendingDataURL) { send({type:'set_dm_avatar', url:avPendingDataURL}); closeAvModal(); }
+  });
+  el('av-cancel').addEventListener('click', closeAvModal);
+  el('av-modal').addEventListener('click', e => { if(e.target===el('av-modal')) closeAvModal(); });
+
+  // Scene drag-drop (from DM screen thumbnails)
+  document.addEventListener('dragover', e => {
+    if (e.dataTransfer.types.includes('application/doom-asset')) {
+      e.preventDefault(); e.dataTransfer.dropEffect='copy';
+      // Only show feedback if NOT over the dm-screen panel
+      const over = document.elementFromPoint(e.clientX, e.clientY);
+      const inPanel = el('dm-screen').contains(over);
+      document.body.classList.toggle('drag-over-scene', !inPanel);
+    }
+  });
+  document.addEventListener('dragleave', e => {
+    if (!e.relatedTarget || e.relatedTarget === document.documentElement)
+      document.body.classList.remove('drag-over-scene');
+  });
+  document.addEventListener('drop', e => {
+    document.body.classList.remove('drag-over-scene');
+    const raw = e.dataTransfer.getData('application/doom-asset');
+    if (!raw) return;
+    e.preventDefault();
+    // Ignore drops onto the DM screen panel itself
+    if (el('dm-screen').contains(e.target)) return;
+    const asset = JSON.parse(raw);
+    switch (asset.cat) {
+      case 'backdrops': applyBackdrop(asset); break;
+      case 'players':   applyPlayer(asset);   break;
+      case 'npcs':      applyNpc(asset);       break;
+      case 'handouts':  applyHandout(asset);   break;
+    }
   });
 
   // DM Screen upload buttons
