@@ -84,18 +84,44 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 #dm-av-frame .av-placeholder { font-size:36px; }
 #dm-label { font-family:'Cinzel',serif; font-size:8px; letter-spacing:.12em; text-transform:uppercase; color:var(--blood); }
 
-/* ── COMBAT ARENA (inside canvas) ── */
+/* ── COMBAT TRANSITION OVERLAY ── */
+#transition-overlay {
+  position:fixed; inset:0; z-index:45;
+  background:#000; opacity:0; display:none; pointer-events:none;
+  transition:opacity 0.5s ease;
+}
+
+/* ── COMBAT ARENA ── */
 #combat-arena { position:absolute; inset:0; display:none; pointer-events:none; }
 body.combat #combat-arena { display:block; }
 
-.ca-wrap { position:absolute; width:100px; pointer-events:all; cursor:grab; display:flex; flex-direction:column; align-items:center; gap:3px; }
+.ca-wrap { position:absolute; width:100px; pointer-events:all; cursor:grab; display:flex; flex-direction:column; align-items:center; }
 .ca-wrap.dragging { cursor:grabbing; z-index:30; }
-.ca-frame { width:100px; height:100px; border-radius:6px; overflow:hidden; background:rgba(20,12,4,.85); border:2px solid var(--border); position:relative; transition:border-color .2s,box-shadow .2s,transform .5s ease; }
+.ca-wrap[data-entity="player"] { animation:ca-from-left  0.55s cubic-bezier(.34,1.3,.64,1) both; }
+.ca-wrap[data-entity="npc"]    { animation:ca-from-right 0.55s cubic-bezier(.34,1.3,.64,1) both; }
+@keyframes ca-from-left  { from{opacity:0;transform:translateX(-120px)} to{opacity:1;transform:translateX(0)} }
+@keyframes ca-from-right { from{opacity:0;transform:translateX(120px)}  to{opacity:1;transform:translateX(0)} }
+
+.ca-frame {
+  width:100px; height:100px; border-radius:6px; overflow:hidden;
+  background:rgba(20,12,4,.85); border:2px solid var(--border); position:relative;
+  transition:border-color .2s,box-shadow .2s,transform .5s ease;
+}
 .ca-wrap.dragging .ca-frame { border-color:var(--gold); box-shadow:0 0 16px rgba(200,169,110,.4); }
 .ca-frame.flipped { transform:scaleX(-1); }
 .ca-frame img { width:100%; height:100%; object-fit:cover; display:block; }
 .ca-frame .av-placeholder { font-size:24px; }
-.ca-label { font-family:'Cinzel',serif; font-size:8px; letter-spacing:.06em; color:var(--gold); text-shadow:0 1px 3px rgba(0,0,0,1); text-align:center; width:100px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
+
+/* Name overlay — inside frame, bottom bar */
+.ca-name-bar {
+  position:absolute; bottom:0; left:0; right:0;
+  background:rgba(0,0,0,0.55);
+  font-family:'Cinzel',serif; font-size:8px; letter-spacing:.06em;
+  color:var(--gold); text-shadow:0 1px 2px rgba(0,0,0,1);
+  text-align:center; padding:2px 4px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  text-transform:uppercase;
+}
 
 /* ═══ VIEWPORT-SPACE UI (fixed, above scene) ═══ */
 
@@ -207,6 +233,9 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
   </div>
 </div>
 
+<!-- TRANSITION OVERLAY -->
+<div id="transition-overlay"></div>
+
 <!-- Hidden file inputs -->
 <input type="file" id="upload-dm-avatar" accept="image/*" style="display:none">
 <input type="file" id="upload-backdrops" accept="image/*" multiple style="display:none">
@@ -269,6 +298,8 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 <!-- PEER STATUS -->
 <div id="peer-status">Initialising…</div>
 
+<input type="file" id="tp-load-file" accept=".json" style="display:none">
+
 <!-- TEST PANEL -->
 <div id="test-panel">
   <h2>DooM Theatre</h2>
@@ -285,6 +316,10 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
   <div id="tp-code">—</div>
   <hr class="tp-divider">
   <div id="tp-peers" style="font-size:9px;color:#2a5a7a">Peers: 0</div>
+  <hr class="tp-divider">
+  <label>Scene</label>
+  <button class="tp-btn" id="tp-save">💾 Save Scene</button>
+  <button class="tp-btn" id="tp-load-btn">📂 Load Scene</button>
 </div>
 
 <script>
@@ -474,27 +509,56 @@ function assignCombatPositions() {
   });
 }
 
-function makeCombatAv(obj, entityType) {
+function makeCombatAv(obj, entityType, idx) {
   const wrap=document.createElement('div'); wrap.className='ca-wrap';
+  wrap.dataset.entity=entityType;
   wrap.style.left=obj.cx+'px'; wrap.style.top=obj.cy+'px';
+  wrap.style.animationDelay=(idx*0.08)+'s';
+
   const frame=document.createElement('div'); frame.className='ca-frame';
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
-  const lbl=document.createElement('div'); lbl.className='ca-label'; lbl.textContent=obj.name||'';
-  wrap.appendChild(frame); wrap.appendChild(lbl);
+
+  // Name overlay bar inside frame
+  if(obj.name){
+    const bar=document.createElement('div'); bar.className='ca-name-bar';
+    bar.textContent=obj.name; frame.appendChild(bar);
+  }
+
+  wrap.appendChild(frame);
   if(isHost){
     frame.addEventListener('mousedown',e=>{ if(e.button!==0) return; e.preventDefault(); combatDragStart(e,wrap,entityType,obj); });
     frame.addEventListener('contextmenu',e=>{ e.preventDefault(); if(confirm(`Remove "${obj.name}"?`)) send({type:entityType==='player'?'remove_player':'remove_npc',id:obj.id}); });
   }
   return wrap;
 }
-function renderCombatArena() { const a=el('combat-arena'); a.innerHTML=''; S.players.forEach(p=>a.appendChild(makeCombatAv(p,'player'))); S.npcs.forEach(n=>a.appendChild(makeCombatAv(n,'npc'))); }
+function renderCombatArena() {
+  const a=el('combat-arena'); a.innerHTML='';
+  S.players.forEach((p,i)=>a.appendChild(makeCombatAv(p,'player',i)));
+  S.npcs.forEach((n,i)=>a.appendChild(makeCombatAv(n,'npc',i)));
+}
 
 function applyCombat() {
-  document.body.classList.toggle('combat',S.combatMode);
-  el('btn-combat').classList.toggle('active',S.combatMode);
-  if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
+  document.body.classList.toggle('combat', S.combatMode);
+  el('btn-combat').classList.toggle('active', S.combatMode);
+
+  const ov = el('transition-overlay');
+
+  // Phase 1: fade to black over 500ms
+  ov.style.display = 'block';
+  ov.style.transition = 'opacity 0.5s ease';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ ov.style.opacity = '1'; }));
+
+  setTimeout(()=>{
+    // At peak darkness: swap layout
+    if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
+
+    // Phase 2: fade out over 600ms
+    ov.style.transition = 'opacity 0.6s ease';
+    ov.style.opacity = '0';
+    setTimeout(()=>{ ov.style.display='none'; }, 600);
+  }, 500);
 }
 
 // ── COMBAT DRAG (uses canvas coordinate space) ───────────────────
@@ -645,6 +709,24 @@ function scheduleFlip() {
 
   // Dice
   document.querySelectorAll('.die-btn').forEach(btn=>btn.addEventListener('click',()=>{ if(!isHost&&!hostConn?.open) return; rollDie(parseInt(btn.dataset.sides)); }));
+
+  // Save / Load
+  el('tp-save').addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='doomtheatre-save.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+  el('tp-load-btn').addEventListener('click',()=>el('tp-load-file').click());
+  el('tp-load-file').addEventListener('change',async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try {
+      S=JSON.parse(await f.text());
+      renderAll();
+      if(isHost) broadcast({type:'full_state',state:S},null);
+    } catch(err){ alert('Invalid save file'); }
+    e.target.value='';
+  });
 })();
 </script>
 </body>
