@@ -540,25 +540,23 @@ function renderCombatArena() {
 }
 
 function applyCombat() {
-  document.body.classList.toggle('combat', S.combatMode);
   el('btn-combat').classList.toggle('active', S.combatMode);
 
   const ov = el('transition-overlay');
-
-  // Phase 1: fade to black over 500ms
   ov.style.display = 'block';
-  ov.style.transition = 'opacity 0.5s ease';
+  ov.style.transition = 'opacity 0.65s ease';
   requestAnimationFrame(()=>requestAnimationFrame(()=>{ ov.style.opacity = '1'; }));
 
   setTimeout(()=>{
-    // At peak darkness: swap layout
+    // 1 second after click: toggle layout under cover of darkness
+    document.body.classList.toggle('combat', S.combatMode);
     if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 
-    // Phase 2: fade out over 600ms
-    ov.style.transition = 'opacity 0.6s ease';
+    // Fade back out — avatars animate in as screen brightens
+    ov.style.transition = 'opacity 0.7s ease';
     ov.style.opacity = '0';
-    setTimeout(()=>{ ov.style.display='none'; }, 600);
-  }, 500);
+    setTimeout(()=>{ ov.style.display='none'; }, 700);
+  }, 1000);
 }
 
 // ── COMBAT DRAG (uses canvas coordinate space) ───────────────────
