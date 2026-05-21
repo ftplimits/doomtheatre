@@ -86,9 +86,11 @@ body.combat #backdrop-vignette {
   background: rgba(20,12,4,0.8);
   border: 2px solid var(--border);
   position: relative; cursor: pointer; flex-shrink: 0;
-  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  transition: transform 0.5s ease, border-color 0.2s, box-shadow 0.2s;
 }
-.av-frame:hover { border-color: var(--gold-dim); transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+.av-frame:hover       { border-color: var(--gold-dim); transform: scaleX(1)  translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+.av-frame.flipped     { transform: scaleX(-1); }
+.av-frame.flipped:hover { transform: scaleX(-1) translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
 .av-frame img   { width: 100%; height: 100%; object-fit: cover; display: block; }
 .av-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--text-dim); }
 .av-label {
@@ -105,6 +107,19 @@ body.combat #backdrop-vignette {
   100% { transform: scaleX(1); }
 }
 .av-frame.flipping { animation: av-flip 0.6s ease-in-out; }
+
+/* ── COMBAT OVERLAY — darkening + grid ── */
+#combat-overlay {
+  position: fixed; inset: 0; z-index: 3;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.5s ease;
+  background-color: rgba(0,0,0,0.5);
+  background-image:
+    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+  background-size: var(--avatar-sz) var(--avatar-sz);
+}
+body.combat #combat-overlay { opacity: 1; }
 #upper-zone .av-wrap { flex-direction: column-reverse; padding-bottom: 4px; }
 
 /* ── DM AVATAR ── */
@@ -346,6 +361,9 @@ body.browser-mode #dice-row { left: calc(50% + 95px); }
 </head>
 <body>
 
+<!-- COMBAT OVERLAY -->
+<div id="combat-overlay"></div>
+
 <!-- BACKDROP -->
 <div id="backdrop"><div id="backdrop-vignette"></div></div>
 
@@ -512,6 +530,9 @@ body.browser-mode #dice-row { left: calc(50% + 95px); }
 <div id="test-panel">
   <h2>DooM Theatre</h2>
   <div id="tp-status">Disconnected</div>
+  <label>DM Avatar</label>
+  <div id="tp-av-wrap" title="Set DM avatar before hosting" style="width:64px;height:64px;border-radius:50%;border:2px dashed rgba(30,60,100,0.6);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#3a6a8a;font-size:28px;margin:0 auto;flex-shrink:0;">👁</div>
+  <input type="file" id="tp-av-file" accept="image/*" style="display:none">
   <button class="tp-btn" id="tp-host">▶ Host Session</button>
   <hr class="tp-divider">
   <label>Join Code</label>
@@ -559,6 +580,22 @@ function fileToDataURL(file) {
     const r = new FileReader();
     r.onload = e => resolve(e.target.result);
     r.readAsDataURL(file);
+  });
+}
+
+async function toWebP(file, quality = 0.9) {
+  const raw = await fileToDataURL(file);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      const webp = c.toDataURL('image/webp', quality);
+      // Fall back to original if browser doesn't support webp export
+      resolve(webp.startsWith('data:image/webp') ? webp : raw);
+    };
+    img.src = raw;
   });
 }
 
@@ -720,7 +757,7 @@ function applyNpc(item)      { send({type:'add_npc',    npc:   {id:uid(), name:i
 
 async function handleUpload(files, cat) {
   for (const file of files) {
-    const url  = await fileToDataURL(file);
+    const url  = await toWebP(file);
     const name = fileBaseName(file);
     S.library[cat].push({url, name});
   }
@@ -759,15 +796,11 @@ function renderDiceLog() {
 
 // ── RANDOM AVATAR FLIP ───────────────────────────────────────────
 function scheduleFlip() {
-  const delay = 6000 + Math.random() * 6000; // 6–12 seconds
+  const delay = 6000 + Math.random() * 6000;
   setTimeout(() => {
     const frames = [...document.querySelectorAll('.av-frame')];
     if (frames.length) {
-      const target = frames[Math.floor(Math.random() * frames.length)];
-      target.classList.remove('flipping');
-      void target.offsetWidth; // force reflow so animation restarts if same element
-      target.classList.add('flipping');
-      target.addEventListener('animationend', () => target.classList.remove('flipping'), {once:true});
+      frames[Math.floor(Math.random() * frames.length)].classList.toggle('flipped');
     }
     scheduleFlip();
   }, delay);
@@ -780,7 +813,22 @@ function scheduleFlip() {
   } else {
     document.body.classList.add('browser-mode');
     el('test-panel').style.display='flex';
-    el('tp-host').addEventListener('click', async () => { roomCode=uid(); el('tp-host').disabled=true; await doHost(); });
+
+    // Pre-host avatar picker
+    let pendingHostAvatar = null;
+    el('tp-av-wrap').addEventListener('click', () => el('tp-av-file').click());
+    el('tp-av-file').addEventListener('change', async e => {
+      const f = e.target.files[0]; if(!f) return;
+      pendingHostAvatar = await toWebP(f);
+      el('tp-av-wrap').innerHTML = `<img src="${pendingHostAvatar}" style="width:100%;height:100%;object-fit:cover;">`;
+      e.target.value='';
+    });
+
+    el('tp-host').addEventListener('click', async () => {
+      roomCode=uid(); el('tp-host').disabled=true;
+      await doHost();
+      if (pendingHostAvatar) send({type:'set_dm_avatar', url: pendingHostAvatar});
+    });
     el('tp-join').addEventListener('click', () => { const c=el('tp-join-code').value.trim(); if(c) doJoin(c); });
     el('tp-join-code').addEventListener('keydown', e => { if(e.key==='Enter') el('tp-join').click(); });
   }
@@ -827,12 +875,12 @@ function scheduleFlip() {
     e.preventDefault(); e.stopPropagation();
     el('av-drop-zone').classList.remove('drag-over');
     const f = e.dataTransfer.files[0];
-    if (f && f.type.startsWith('image/')) setAvPreview(await fileToDataURL(f));
+    if (f && f.type.startsWith('image/')) setAvPreview(await toWebP(f));
   });
 
   el('upload-dm-avatar').addEventListener('change', async e => {
     const f = e.target.files[0]; if(!f) return;
-    setAvPreview(await fileToDataURL(f));
+    setAvPreview(await toWebP(f));
     e.target.value='';
   });
 
