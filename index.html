@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DooM Theatre</title>
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=IM+Fell+English&display=swap');
 
@@ -536,6 +536,7 @@ let S = {
 // ── SESSION ──────────────────────────────────────────────────────
 let isHost = false, isDiscord = false, roomCode = null;
 let myPeer = null, hostConn = null, guestConns = [];
+let dragAsset = null;
 
 // ── UTIL ─────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -683,8 +684,14 @@ function buildLib(containerId, items, clickFn) {
     thumb.draggable = true;
     thumb.innerHTML = `<img src="${item.url}" alt="" draggable="false"><span class="res-del">✕</span>`;
     thumb.addEventListener('dragstart', e => {
+      dragAsset = {url: item.url, name: item.name||'', cat};
       e.dataTransfer.effectAllowed = 'copy';
-      e.dataTransfer.setData('application/doom-asset', JSON.stringify({url:item.url, name:item.name||'', cat}));
+      e.dataTransfer.setData('text/plain', cat);
+      thumb.style.opacity = '0.5';
+    });
+    thumb.addEventListener('dragend', () => {
+      dragAsset = null;
+      thumb.style.opacity = '';
     });
     thumb.querySelector('img').addEventListener('click', ()=>clickFn(item));
     thumb.querySelector('.res-del').addEventListener('click', e=>{ e.stopPropagation(); removeLib(containerId,idx); });
@@ -813,13 +820,11 @@ function renderDiceLog() {
 
   // Scene drag-drop (from DM screen thumbnails)
   document.addEventListener('dragover', e => {
-    if (e.dataTransfer.types.includes('application/doom-asset')) {
-      e.preventDefault(); e.dataTransfer.dropEffect='copy';
-      // Only show feedback if NOT over the dm-screen panel
-      const over = document.elementFromPoint(e.clientX, e.clientY);
-      const inPanel = el('dm-screen').contains(over);
-      document.body.classList.toggle('drag-over-scene', !inPanel);
-    }
+    if (!dragAsset) return;
+    if (el('dm-screen').contains(e.target)) { document.body.classList.remove('drag-over-scene'); return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    document.body.classList.add('drag-over-scene');
   });
   document.addEventListener('dragleave', e => {
     if (!e.relatedTarget || e.relatedTarget === document.documentElement)
@@ -827,12 +832,10 @@ function renderDiceLog() {
   });
   document.addEventListener('drop', e => {
     document.body.classList.remove('drag-over-scene');
-    const raw = e.dataTransfer.getData('application/doom-asset');
-    if (!raw) return;
-    e.preventDefault();
-    // Ignore drops onto the DM screen panel itself
+    if (!dragAsset) return;
     if (el('dm-screen').contains(e.target)) return;
-    const asset = JSON.parse(raw);
+    e.preventDefault();
+    const asset = dragAsset; dragAsset = null;
     switch (asset.cat) {
       case 'backdrops': applyBackdrop(asset); break;
       case 'players':   applyPlayer(asset);   break;
