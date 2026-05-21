@@ -195,7 +195,19 @@ body.panel-open #dice-log { right:296px; }
 .log-entry.old { color:var(--gold-dim); font-size:10px; }
 @keyframes log-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
-/* ── SCENE DRAG FEEDBACK ── */
+/* ── DICE SWATCHES ── */
+#dice-swatches {
+  position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
+  z-index:15; display:flex; gap:5px; align-items:center;
+}
+.dswatch {
+  width:12px; height:12px; border-radius:50%; cursor:pointer;
+  border:2px solid rgba(0,0,0,0.4);
+  transition:transform .15s, border-color .15s;
+  flex-shrink:0;
+}
+.dswatch:hover  { transform:scale(1.3); }
+.dswatch.active { border-color:#fff; transform:scale(1.2); }
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
 /* ── PEER STATUS ── */
@@ -244,19 +256,6 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 <input type="file" id="upload-handouts"  accept="image/*" multiple style="display:none">
 <input type="file" id="tp-av-file"       accept="image/*" style="display:none">
 
-<!-- DM AVATAR MODAL -->
-<div id="av-modal">
-  <div id="av-modal-box">
-    <div id="av-modal-title">Set DM Avatar</div>
-    <div id="av-drop-zone"><strong>Drop image here</strong><span>or click to browse</span></div>
-    <div id="av-preview-wrap"><img id="av-preview" src="" alt=""></div>
-    <div id="av-modal-btns">
-      <button id="av-confirm" disabled>Set Avatar</button>
-      <button id="av-cancel">Cancel</button>
-    </div>
-  </div>
-</div>
-
 <!-- DICE -->
 <div id="dice-row">
   <button class="die-btn" data-sides="4"   title="d4">  <svg viewBox="0 0 60 60"><polygon points="30,5 56,52 4,52"              class="die-poly"/><line x1="30" y1="5" x2="30" y2="52" class="die-inner-line"/><text x="30" y="42" class="die-label">d4</text></svg></button>
@@ -267,6 +266,7 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
   <button class="die-btn" data-sides="20"  title="d20"> <svg viewBox="0 0 60 60"><polygon points="30,4 54,17 54,43 30,56 6,43 6,17" class="die-poly"/><line x1="6" y1="17" x2="54" y2="17" class="die-inner-line"/><line x1="6" y1="43" x2="54" y2="43" class="die-inner-line"/><text x="30" y="35" class="die-label">d20</text></svg></button>
   <button class="die-btn" data-sides="100" title="d100"><svg viewBox="0 0 60 60"><polygon points="30,4 52,20 46,52 14,52 8,20"    class="die-poly"/><text x="30" y="35" class="die-label" style="font-size:9px">d100</text></svg></button>
 </div>
+<div id="dice-swatches"></div>
 <div id="dice-log"></div>
 
 <!-- TOOLBAR -->
@@ -338,7 +338,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 
 // ── STATE ────────────────────────────────────────────────────────
 let S = {
-  backdrop:null, dmAvatar:null,
+  backdrop:null, dmAvatar:null, dmName:null,
   players:[], npcs:[],
   combatMode:false,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
@@ -447,7 +447,7 @@ function handleMsg(msg,fromConn) {
   switch(msg.type) {
     case 'full_state':    S=msg.state; renderAll(); break;
     case 'set_backdrop':  S.backdrop=msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
-    case 'set_dm_avatar': S.dmAvatar=msg.url; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_dm_avatar': S.dmAvatar=msg.url; S.dmName=msg.name||null; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
     case 'add_player':    S.players.push(msg.player); renderLowerZone(); if(isHost) broadcast(msg,fromConn); break;
     case 'remove_player': S.players=S.players.filter(p=>p.id!==msg.id); renderLowerZone(); if(S.combatMode) renderCombatArena(); if(isHost) broadcast(msg,fromConn); break;
     case 'add_npc':       S.npcs.push(msg.npc); renderUpperZone(); if(isHost) broadcast(msg,fromConn); break;
@@ -471,7 +471,10 @@ function handleMsg(msg,fromConn) {
 // ── RENDER ───────────────────────────────────────────────────────
 function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); applyCombat(); renderLibraries(); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
-function renderDmAvatar()  { el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`; }
+function renderDmAvatar() {
+  el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
+  el('dm-label').textContent=S.dmName||'DM';
+}
 
 function makeAvatarEl(obj,removeType) {
   const wrap=document.createElement('div'); wrap.className='av-wrap';
@@ -556,7 +559,7 @@ function applyCombat() {
     ov.style.transition = 'opacity 0.7s ease';
     ov.style.opacity = '0';
     setTimeout(()=>{ ov.style.display='none'; }, 700);
-  }, 1000);
+  }, 1500);
 }
 
 // ── COMBAT DRAG (uses canvas coordinate space) ───────────────────
@@ -661,10 +664,10 @@ function scheduleFlip() {
     document.body.classList.add('browser-mode');
     el('test-panel').style.display='flex';
 
-    let pendingHostAvatar=null;
+    let pendingHostAvatar=null, pendingHostName=null;
     el('tp-av-wrap').addEventListener('click',()=>el('tp-av-file').click());
-    el('tp-av-file').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; pendingHostAvatar=await toWebP(f); el('tp-av-wrap').innerHTML=`<img src="${pendingHostAvatar}" style="width:100%;height:100%;object-fit:cover;">`; e.target.value=''; });
-    el('tp-host').addEventListener('click',async()=>{ roomCode=uid(); el('tp-host').disabled=true; await doHost(); if(pendingHostAvatar) send({type:'set_dm_avatar',url:pendingHostAvatar}); });
+    el('tp-av-file').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; pendingHostAvatar=await toWebP(f); pendingHostName=fileBaseName(f); el('tp-av-wrap').innerHTML=`<img src="${pendingHostAvatar}" style="width:100%;height:100%;object-fit:cover;">`; e.target.value=''; });
+    el('tp-host').addEventListener('click',async()=>{ roomCode=uid(); el('tp-host').disabled=true; await doHost(); if(pendingHostAvatar) send({type:'set_dm_avatar',url:pendingHostAvatar,name:pendingHostName||'DM'}); });
     el('tp-join').addEventListener('click',()=>{ const c=el('tp-join-code').value.trim(); if(c) doJoin(c); });
     el('tp-join-code').addEventListener('keydown',e=>{ if(e.key==='Enter') el('tp-join').click(); });
   }
@@ -677,20 +680,14 @@ function scheduleFlip() {
   el('btn-combat').addEventListener('click',()=>{ if(isHost) send({type:'set_combat',active:!S.combatMode}); });
   el('btn-handout').addEventListener('click',()=>{ el('upload-handouts').click(); });
 
-  // DM Avatar modal
-  let avPending=null;
-  el('dm-av-frame').addEventListener('click',()=>{ if(isHost) openAvModal(); });
-  function openAvModal(){ avPending=null; el('av-preview-wrap').style.display='none'; el('av-preview').src=''; el('av-confirm').disabled=true; el('av-modal').classList.add('open'); }
-  function closeAvModal(){ el('av-modal').classList.remove('open'); }
-  function setAvPreview(url){ avPending=url; el('av-preview').src=url; el('av-preview-wrap').style.display='flex'; el('av-confirm').disabled=false; }
-  el('av-drop-zone').addEventListener('click',()=>el('upload-dm-avatar').click());
-  el('av-drop-zone').addEventListener('dragover', e=>{ e.preventDefault(); el('av-drop-zone').classList.add('drag-over'); });
-  el('av-drop-zone').addEventListener('dragleave',()=>el('av-drop-zone').classList.remove('drag-over'));
-  el('av-drop-zone').addEventListener('drop',async e=>{ e.preventDefault(); e.stopPropagation(); el('av-drop-zone').classList.remove('drag-over'); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) setAvPreview(await toWebP(f)); });
-  el('upload-dm-avatar').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; setAvPreview(await toWebP(f)); e.target.value=''; });
-  el('av-confirm').addEventListener('click',()=>{ if(avPending){ send({type:'set_dm_avatar',url:avPending}); closeAvModal(); } });
-  el('av-cancel').addEventListener('click',closeAvModal);
-  el('av-modal').addEventListener('click',e=>{ if(e.target===el('av-modal')) closeAvModal(); });
+  // DM Avatar — single click → file picker
+  el('dm-av-frame').addEventListener('click', ()=>{ if(isHost) el('upload-dm-avatar').click(); });
+  el('upload-dm-avatar').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const url=await toWebP(f);
+    send({type:'set_dm_avatar', url, name:fileBaseName(f)});
+    e.target.value='';
+  });
 
   // Handout
   el('handout-overlay').addEventListener('click',e=>{ if(e.target===el('handout-overlay')) send({type:'dismiss_handout'}); });
@@ -705,7 +702,29 @@ function scheduleFlip() {
   document.addEventListener('dragleave',e=>{ if(!e.relatedTarget||e.relatedTarget===document.documentElement) document.body.classList.remove('drag-over-scene'); });
   document.addEventListener('drop',e=>{ document.body.classList.remove('drag-over-scene'); if(!dragAsset) return; if(el('dm-screen').contains(e.target)) return; e.preventDefault(); const a=dragAsset; dragAsset=null; switch(a.cat){ case'backdrops':applyBackdrop(a);break; case'players':applyPlayer(a);break; case'npcs':applyNpc(a);break; case'handouts':applyHandout(a);break; } });
 
-  // Dice
+  // Dice palettes
+  const DICE_PALETTES = [
+    { label:'Bone',   fill:'#f5f0e0', stroke:'#2a1a0a' },
+    { label:'Blood',  fill:'#8b0000', stroke:'#f5e0e0' },
+    { label:'Gold',   fill:'#c8a96e', stroke:'#2a1a0a' },
+    { label:'Arcane', fill:'#2a1060', stroke:'#c0a0ff' },
+    { label:'Iron',   fill:'#4a4a55', stroke:'#d0d0e0' },
+    { label:'Jade',   fill:'#1a4a2e', stroke:'#90ffb8'  },
+  ];
+  function applyDicePalette(p) {
+    document.documentElement.style.setProperty('--dice-fill',   p.fill);
+    document.documentElement.style.setProperty('--dice-stroke', p.stroke);
+    document.querySelectorAll('.dswatch').forEach(s=>s.classList.toggle('active', s.dataset.palette===p.label));
+  }
+  const swatchWrap = el('dice-swatches');
+  DICE_PALETTES.forEach(p=>{
+    const s=document.createElement('div');
+    s.className='dswatch'; s.dataset.palette=p.label; s.title=p.label;
+    s.style.background=p.fill; s.style.borderColor=p.stroke;
+    s.addEventListener('click',()=>applyDicePalette(p));
+    swatchWrap.appendChild(s);
+  });
+  applyDicePalette(DICE_PALETTES[0]);
   document.querySelectorAll('.die-btn').forEach(btn=>btn.addEventListener('click',()=>{ if(!isHost&&!hostConn?.open) return; rollDie(parseInt(btn.dataset.sides)); }));
 
   // Save / Load
