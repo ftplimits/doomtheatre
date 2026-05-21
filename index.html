@@ -21,8 +21,8 @@
   --border-hot: rgba(139, 0, 0, 0.7);
   --text:       #c8bba5;
   --text-dim:   #6a5f4e;
-  --avatar-sz:  90px;
-  --avatar-sz-combat: 100px;
+  --avatar-sz:  180px;
+  --avatar-sz-combat: 200px;
   --dice-fill:  #f5f0e0;
   --dice-stroke:#2a1a0a;
 }
@@ -92,17 +92,25 @@ body.combat #backdrop-vignette {
 .av-frame img   { width: 100%; height: 100%; object-fit: cover; display: block; }
 .av-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--text-dim); }
 .av-label {
-  font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 0.08em;
+  font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.08em;
   color: var(--gold); text-shadow: 0 1px 4px rgba(0,0,0,0.9);
   text-align: center; max-width: var(--avatar-sz);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase;
 }
+
+@keyframes av-flip {
+  0%   { transform: scaleX(1); }
+  30%  { transform: scaleX(-1); }
+  70%  { transform: scaleX(-1); }
+  100% { transform: scaleX(1); }
+}
+.av-frame.flipping { animation: av-flip 0.6s ease-in-out; }
 #upper-zone .av-wrap { flex-direction: column-reverse; padding-bottom: 4px; }
 
 /* ── DM AVATAR ── */
 #dm-avatar-wrap { position: fixed; top: 16px; left: 16px; z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 #dm-av-frame {
-  width: 72px; height: 72px; border-radius: 50%; overflow: hidden;
+  width: 144px; height: 144px; border-radius: 50%; overflow: hidden;
   background: rgba(20,12,4,0.85);
   border: 2px solid var(--blood);
   box-shadow: 0 0 16px rgba(139,0,0,0.4), inset 0 0 8px rgba(0,0,0,0.5);
@@ -749,7 +757,21 @@ function renderDiceLog() {
   });
 }
 
-// ── INIT ─────────────────────────────────────────────────────────
+// ── RANDOM AVATAR FLIP ───────────────────────────────────────────
+function scheduleFlip() {
+  const delay = 6000 + Math.random() * 6000; // 6–12 seconds
+  setTimeout(() => {
+    const frames = [...document.querySelectorAll('.av-frame')];
+    if (frames.length) {
+      const target = frames[Math.floor(Math.random() * frames.length)];
+      target.classList.remove('flipping');
+      void target.offsetWidth; // force reflow so animation restarts if same element
+      target.classList.add('flipping');
+      target.addEventListener('animationend', () => target.classList.remove('flipping'), {once:true});
+    }
+    scheduleFlip();
+  }, delay);
+}
 (async function init() {
   const inDiscord = detectDiscord();
 
@@ -762,6 +784,8 @@ function renderDiceLog() {
     el('tp-join').addEventListener('click', () => { const c=el('tp-join-code').value.trim(); if(c) doJoin(c); });
     el('tp-join-code').addEventListener('keydown', e => { if(e.key==='Enter') el('tp-join').click(); });
   }
+
+  scheduleFlip();
 
   // Toolbar
   el('btn-screen').addEventListener('click', () => {
