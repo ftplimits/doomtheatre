@@ -7,12 +7,10 @@
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=IM+Fell+English&display=swap');
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --blood:      #8b0000;
-  --blood-dim:  #5a0000;
   --gold:       #c8a96e;
   --gold-dim:   #7a6030;
   --bg:         #0d0a07;
@@ -21,369 +19,194 @@
   --border-hot: rgba(139, 0, 0, 0.7);
   --text:       #c8bba5;
   --text-dim:   #6a5f4e;
-  --avatar-sz:  180px;
-  --avatar-sz-combat: 200px;
+  --av:         200px;   /* normal avatar size */
+  --cell:       100px;   /* combat cell = combat avatar size */
   --dice-fill:  #f5f0e0;
   --dice-stroke:#2a1a0a;
 }
 
-html, body {
-  width: 100vw; height: 100vh;
-  overflow: hidden;
-  background: var(--bg);
-  font-family: 'IM Fell English', Georgia, serif;
-  color: var(--text);
-  user-select: none;
-}
+html, body { width:100vw; height:100vh; overflow:hidden; background:var(--bg); font-family:'IM Fell English',Georgia,serif; color:var(--text); user-select:none; }
 
 /* ── BACKDROP ── */
-#backdrop {
-  position: fixed; inset: 0; z-index: 0;
-  background: radial-gradient(ellipse at center, #1a1008 0%, #0d0a07 100%);
-  background-size: cover;
-  background-position: center;
-  transition: background-image 0.8s ease;
-}
-#backdrop-vignette {
-  position: absolute; inset: 0;
-  background:
-    linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.1) 75%, rgba(0,0,0,0.65) 100%),
-    linear-gradient(to right,  rgba(0,0,0,0.3)  0%, transparent 20%, transparent 80%, rgba(0,0,0,0.3) 100%);
-}
-body.combat #backdrop-vignette {
-  background:
-    linear-gradient(to bottom, rgba(60,0,0,0.4) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.1) 70%, rgba(60,0,0,0.4) 100%),
-    linear-gradient(to right,  rgba(139,0,0,0.15) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.4) 100%);
-  transition: background 0.5s;
-}
+#backdrop { position:fixed; inset:0; z-index:0; background:radial-gradient(ellipse at center,#1a1008 0%,#0d0a07 100%); background-size:cover; background-position:center; transition:background-image .8s ease; }
+#backdrop-vignette { position:absolute; inset:0; background: linear-gradient(to bottom,rgba(0,0,0,.55) 0%,rgba(0,0,0,.1) 25%,rgba(0,0,0,.1) 75%,rgba(0,0,0,.65) 100%), linear-gradient(to right,rgba(0,0,0,.3) 0%,transparent 20%,transparent 80%,rgba(0,0,0,.3) 100%); }
 
-/* ── AVATAR ZONES ── */
-#upper-zone, #lower-zone {
-  position: fixed; left: 0; right: 0;
-  z-index: 10;
-  display: flex; flex-direction: row;
-  justify-content: center; align-items: flex-end;
-  gap: 12px; padding: 0 120px;
-  pointer-events: none;
-  transition: all 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-}
-#upper-zone { top: 0; height: 32%; align-items: flex-start; padding-top: 12px; }
-#lower-zone { bottom: 0; height: 32%; padding-bottom: 72px; }
-
-/* ── AVATAR FRAME ── */
-.av-wrap {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 4px; pointer-events: all;
-  animation: av-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-@keyframes av-enter {
-  from { opacity: 0; transform: scale(0.6) translateY(20px); }
-  to   { opacity: 1; transform: scale(1)   translateY(0); }
-}
-.av-frame {
-  width: var(--avatar-sz); height: var(--avatar-sz);
-  border-radius: 8px; overflow: hidden;
-  background: rgba(20,12,4,0.8);
-  border: 2px solid var(--border);
-  position: relative; cursor: pointer; flex-shrink: 0;
-  transition: transform 0.5s ease, border-color 0.2s, box-shadow 0.2s;
-}
-.av-frame:hover       { border-color: var(--gold-dim); transform: scaleX(1)  translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
-.av-frame.flipped     { transform: scaleX(-1); }
-.av-frame.flipped:hover { transform: scaleX(-1) translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
-.av-frame img   { width: 100%; height: 100%; object-fit: cover; display: block; }
-.av-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--text-dim); }
-.av-label {
-  font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.08em;
-  color: var(--gold); text-shadow: 0 1px 4px rgba(0,0,0,0.9);
-  text-align: center; max-width: var(--avatar-sz);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase;
-}
-
-@keyframes av-flip {
-  0%   { transform: scaleX(1); }
-  30%  { transform: scaleX(-1); }
-  70%  { transform: scaleX(-1); }
-  100% { transform: scaleX(1); }
-}
-.av-frame.flipping { animation: av-flip 0.6s ease-in-out; }
-
-/* ── COMBAT OVERLAY — darkening + grid ── */
+/* ── COMBAT OVERLAY — 50% darken + 100px grid ── */
 #combat-overlay {
-  position: fixed; inset: 0; z-index: 3;
-  pointer-events: none; opacity: 0;
-  transition: opacity 0.5s ease;
-  background-color: rgba(0,0,0,0.5);
-  background-image:
-    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
-  background-size: var(--avatar-sz) var(--avatar-sz);
+  position:fixed; inset:0; z-index:3; pointer-events:none; opacity:0; transition:opacity .5s ease;
+  background-color:rgba(0,0,0,.5);
+  background-image: linear-gradient(rgba(255,255,255,.12) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,.12) 1px,transparent 1px);
+  background-size:var(--cell) var(--cell);
 }
-body.combat #combat-overlay { opacity: 1; }
-#upper-zone .av-wrap { flex-direction: column-reverse; padding-bottom: 4px; }
+body.combat #combat-overlay { opacity:1; }
+
+/* ── NORMAL AVATAR ZONES ── */
+#upper-zone, #lower-zone {
+  position:fixed; left:0; right:0; z-index:10;
+  display:flex; flex-direction:row; justify-content:center; align-items:flex-end;
+  gap:14px; padding:0 140px; pointer-events:none;
+  transition:all .45s cubic-bezier(.4,0,.2,1);
+}
+#upper-zone { top:0; height:34%; align-items:flex-start; padding-top:14px; }
+#lower-zone { bottom:0; height:34%; padding-bottom:80px; }
+body.combat #upper-zone, body.combat #lower-zone { display:none; }
+
+/* ── NORMAL AVATAR FRAME ── */
+.av-wrap { display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:all; animation:av-enter .35s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes av-enter { from{opacity:0;transform:scale(.6) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.av-frame {
+  width:var(--av); height:var(--av); border-radius:8px; overflow:hidden;
+  background:rgba(20,12,4,.8); border:2px solid var(--border);
+  position:relative; cursor:pointer; flex-shrink:0;
+  transition:transform .5s ease, border-color .2s, box-shadow .2s;
+}
+.av-frame:hover       { border-color:var(--gold-dim); transform:scaleX(1)  translateY(-4px); box-shadow:0 10px 28px rgba(0,0,0,.6); }
+.av-frame.flipped     { transform:scaleX(-1); }
+.av-frame.flipped:hover { transform:scaleX(-1) translateY(-4px); box-shadow:0 10px 28px rgba(0,0,0,.6); }
+.av-frame img { width:100%; height:100%; object-fit:cover; display:block; }
+.av-placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:40px; color:var(--text-dim); }
+.av-label { font-family:'Cinzel',serif; font-size:10px; letter-spacing:.08em; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,.9); text-align:center; max-width:var(--av); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
+#upper-zone .av-wrap { flex-direction:column-reverse; padding-bottom:4px; }
 
 /* ── DM AVATAR ── */
-#dm-avatar-wrap { position: fixed; top: 16px; left: 16px; z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-#dm-av-frame {
-  width: 144px; height: 144px; border-radius: 50%; overflow: hidden;
-  background: rgba(20,12,4,0.85);
-  border: 2px solid var(--blood);
-  box-shadow: 0 0 16px rgba(139,0,0,0.4), inset 0 0 8px rgba(0,0,0,0.5);
-  cursor: pointer; position: relative; transition: box-shadow 0.25s;
-}
-#dm-av-frame:hover { box-shadow: 0 0 24px rgba(139,0,0,0.7), inset 0 0 8px rgba(0,0,0,0.5); }
-#dm-av-frame img { width: 100%; height: 100%; object-fit: cover; }
-#dm-av-frame .av-placeholder { font-size: 28px; }
-#dm-label { font-family: 'Cinzel', serif; font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--blood); }
+#dm-avatar-wrap { position:fixed; top:16px; left:16px; z-index:20; display:flex; flex-direction:column; align-items:center; gap:4px; }
+#dm-av-frame { width:144px; height:144px; border-radius:50%; overflow:hidden; background:rgba(20,12,4,.85); border:2px solid var(--blood); box-shadow:0 0 16px rgba(139,0,0,.4),inset 0 0 8px rgba(0,0,0,.5); cursor:pointer; position:relative; transition:box-shadow .25s; }
+#dm-av-frame:hover { box-shadow:0 0 24px rgba(139,0,0,.7),inset 0 0 8px rgba(0,0,0,.5); }
+#dm-av-frame img { width:100%; height:100%; object-fit:cover; }
+#dm-av-frame .av-placeholder { font-size:36px; }
+#dm-label { font-family:'Cinzel',serif; font-size:8px; letter-spacing:.12em; text-transform:uppercase; color:var(--blood); }
 
-/* ── COMBAT MODE ── */
-body.combat #lower-zone {
-  left: 6%; right: auto; top: 50%; bottom: auto;
-  height: auto; width: auto; max-width: calc(var(--avatar-sz-combat) + 24px);
-  transform: translateY(-50%);
-  flex-direction: column-reverse; justify-content: center; align-items: flex-start;
-  padding: 0; gap: 10px;
+/* ── COMBAT ARENA ── */
+#combat-arena { position:fixed; inset:0; z-index:11; display:none; pointer-events:none; }
+body.combat #combat-arena { display:block; }
+
+.ca-wrap {
+  position:absolute; width:var(--cell); pointer-events:all; cursor:grab;
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  transition:left .18s ease, top .18s ease;
 }
-body.combat #upper-zone {
-  right: 6%; left: auto; top: 50%; bottom: auto;
-  height: auto; width: auto; max-width: calc(var(--avatar-sz-combat) + 24px);
-  transform: translateY(-50%);
-  flex-direction: column; justify-content: center; align-items: flex-end;
-  padding: 0; gap: 10px;
+.ca-wrap.dragging { transition:none; cursor:grabbing; z-index:30; }
+.ca-frame {
+  width:var(--cell); height:var(--cell); border-radius:6px; overflow:hidden;
+  background:rgba(20,12,4,.85); border:2px solid var(--border);
+  position:relative;
+  transition:transform .5s ease, border-color .2s, box-shadow .2s;
 }
-body.combat .av-frame { width: var(--avatar-sz-combat); height: var(--avatar-sz-combat); border-radius: 6px; }
-body.combat #upper-zone .av-wrap { flex-direction: column;         align-items: flex-end; }
-body.combat #lower-zone .av-wrap { flex-direction: column-reverse; align-items: flex-start; }
+.ca-wrap.dragging .ca-frame { border-color:var(--gold); box-shadow:0 0 16px rgba(200,169,110,.4); }
+.ca-frame.flipped     { transform:scaleX(-1); }
+.ca-frame img { width:100%; height:100%; object-fit:cover; display:block; }
+.ca-frame .av-placeholder { font-size:24px; }
+.ca-label { font-family:'Cinzel',serif; font-size:8px; letter-spacing:.06em; color:var(--gold); text-shadow:0 1px 3px rgba(0,0,0,1); text-align:center; width:var(--cell); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
 
 /* ── TOOLBAR ── */
-#toolbar {
-  position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
-  z-index: 25; display: flex; flex-direction: column; gap: 5px; transition: right 0.25s;
-}
-body.panel-open #toolbar { right: 294px; }
-.tbtn {
-  width: 36px; height: 36px;
-  background: var(--panel-bg); border: 1px solid var(--border); border-radius: 6px;
-  color: var(--gold-dim); font-size: 17px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-  flex-shrink: 0;
-}
-.tbtn:hover  { color: var(--gold); border-color: var(--gold-dim); background: rgba(30,18,4,0.95); }
-.tbtn.active { color: #ff6060; border-color: var(--blood); background: rgba(60,0,0,0.4); box-shadow: 0 0 8px rgba(139,0,0,0.4); }
+#toolbar { position:fixed; right:14px; top:50%; transform:translateY(-50%); z-index:25; display:flex; flex-direction:column; gap:5px; transition:right .25s; }
+body.panel-open #toolbar { right:294px; }
+.tbtn { width:36px; height:36px; background:var(--panel-bg); border:1px solid var(--border); border-radius:6px; color:var(--gold-dim); font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:color .15s,border-color .15s,background .15s; flex-shrink:0; }
+.tbtn:hover  { color:var(--gold); border-color:var(--gold-dim); background:rgba(30,18,4,.95); }
+.tbtn.active { color:#ff6060; border-color:var(--blood); background:rgba(60,0,0,.4); box-shadow:0 0 8px rgba(139,0,0,.4); }
 
 /* ── DM SCREEN ── */
-#dm-screen {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 280px;
-  background: var(--panel-bg); border-left: 1px solid var(--border);
-  z-index: 30; transform: translateX(100%);
-  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
-  display: flex; flex-direction: column; overflow: hidden;
-}
-#dm-screen.open { transform: translateX(0); }
-#dm-screen-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px; border-bottom: 1px solid var(--border);
-  background: rgba(20,8,0,0.6); flex-shrink: 0;
-}
-#dm-screen-head span { font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); }
-#dm-screen-body { flex: 1; overflow-y: auto; padding: 12px; scrollbar-width: thin; scrollbar-color: var(--gold-dim) transparent; }
-.ds-section { margin-bottom: 18px; }
-.ds-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 8px; }
-.ds-head h3 { font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold-dim); }
-.upload-btn {
-  background: rgba(40,20,0,0.6); border: 1px solid var(--border);
-  border-radius: 3px; color: var(--gold-dim); font-size: 9px;
-  padding: 2px 6px; cursor: pointer; font-family: 'Cinzel', serif;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  transition: background 0.15s, color 0.15s;
-  display: flex; align-items: center; gap: 3px;
-}
-.upload-btn:hover { background: rgba(100,40,0,0.6); color: var(--gold); }
-.res-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
-.res-thumb {
-  aspect-ratio: 1; border-radius: 4px; overflow: hidden;
-  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
-  cursor: pointer; transition: border-color 0.15s, transform 0.1s; position: relative;
-}
-.res-thumb:hover { border-color: var(--blood); transform: scale(1.06); }
-.res-thumb img   { width: 100%; height: 100%; object-fit: cover; display: block; }
-.res-del {
-  position: absolute; top: 2px; right: 2px;
-  width: 14px; height: 14px; background: rgba(0,0,0,0.75);
-  border-radius: 50%; display: none;
-  align-items: center; justify-content: center;
-  font-size: 8px; color: #f88; cursor: pointer; line-height: 1;
-}
-.res-thumb:hover .res-del { display: flex; }
-
-/* ── HANDOUT ── */
-#handout-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.82);
-  z-index: 50; display: none; align-items: center; justify-content: center;
-  backdrop-filter: blur(4px);
-}
-#handout-overlay.visible { display: flex; }
-#handout-box {
-  position: relative; max-width: 72vw; max-height: 82vh;
-  border: 2px solid var(--gold-dim); border-radius: 8px; overflow: hidden;
-  box-shadow: 0 0 60px rgba(0,0,0,0.8);
-  animation: handout-enter 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
-}
-@keyframes handout-enter { from { opacity:0; transform:scale(0.85); } to { opacity:1; transform:scale(1); } }
-#handout-box img { display: block; max-width: 72vw; max-height: 82vh; object-fit: contain; }
-#handout-close {
-  position: absolute; top: 8px; right: 8px;
-  background: rgba(0,0,0,0.7); border: 1px solid #555; color: #ccc;
-  width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 13px;
-  display: flex; align-items: center; justify-content: center; transition: background 0.15s;
-}
-#handout-close:hover { background: rgba(139,0,0,0.6); }
-
-/* ── DICE ROW ── */
-#dice-row {
-  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-  z-index: 15;
-  display: flex; flex-direction: row; align-items: center; gap: 4px;
-  pointer-events: all;
-}
-.die-btn {
-  background: none; border: none; cursor: pointer; padding: 2px;
-  border-radius: 4px; display: flex; align-items: center; justify-content: center;
-  transition: transform 0.15s, filter 0.15s;
-}
-.die-btn:hover  { transform: scale(1.18); filter: drop-shadow(0 0 5px rgba(200,169,110,0.6)); }
-.die-btn:active { transform: scale(0.92); }
-.die-btn.spinning { animation: die-spin 0.4s ease-out; }
-@keyframes die-spin {
-  0%   { transform: rotate(0deg)   scale(1.1); }
-  50%  { transform: rotate(180deg) scale(1.2); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-.die-btn svg   { width: 44px; height: 44px; display: block; }
-.die-poly      { fill: var(--dice-fill); stroke: var(--dice-stroke); stroke-width: 2.5; }
-.die-poly-rect { fill: var(--dice-fill); stroke: var(--dice-stroke); stroke-width: 2.5; }
-.die-inner-line{ stroke: var(--dice-stroke); stroke-width: 1.2; fill: none; opacity: 0.45; }
-.die-label     { fill: var(--dice-stroke); font-family: 'Cinzel', serif; font-size: 12px; font-weight: 600; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
-
-/* ── DICE LOG ── */
-#dice-log {
-  position: fixed; bottom: 80px; right: 16px;
-  z-index: 16; display: flex; flex-direction: column-reverse; gap: 3px;
-  pointer-events: none; max-width: 160px;
-}
-body.panel-open #dice-log { right: 296px; }
-.log-entry {
-  font-family: 'Cinzel', serif; font-size: 11px;
-  color: var(--gold); text-shadow: 0 1px 4px rgba(0,0,0,1);
-  text-align: right; white-space: nowrap;
-  animation: log-in 0.2s ease both;
-}
-.log-entry.old { color: var(--gold-dim); font-size: 10px; }
-@keyframes log-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+#dm-screen { position:fixed; top:0; right:0; bottom:0; width:280px; background:var(--panel-bg); border-left:1px solid var(--border); z-index:30; transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); display:flex; flex-direction:column; overflow:hidden; }
+#dm-screen.open { transform:translateX(0); }
+#dm-screen-head { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--border); background:rgba(20,8,0,.6); flex-shrink:0; }
+#dm-screen-head span { font-family:'Cinzel',serif; font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:var(--gold); }
+#dm-screen-body { flex:1; overflow-y:auto; padding:12px; scrollbar-width:thin; scrollbar-color:var(--gold-dim) transparent; }
+.ds-section { margin-bottom:18px; }
+.ds-head { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); padding-bottom:5px; margin-bottom:8px; }
+.ds-head h3 { font-family:'Cinzel',serif; font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold-dim); }
+.upload-btn { background:rgba(40,20,0,.6); border:1px solid var(--border); border-radius:3px; color:var(--gold-dim); font-size:9px; padding:2px 6px; cursor:pointer; font-family:'Cinzel',serif; letter-spacing:.06em; text-transform:uppercase; transition:background .15s,color .15s; display:flex; align-items:center; gap:3px; }
+.upload-btn:hover { background:rgba(100,40,0,.6); color:var(--gold); }
+.res-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+.res-thumb { aspect-ratio:1; border-radius:4px; overflow:hidden; background:rgba(255,255,255,.04); border:1px solid var(--border); cursor:pointer; transition:border-color .15s,transform .1s; position:relative; }
+.res-thumb:hover { border-color:var(--blood); transform:scale(1.06); }
+.res-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+.res-del { position:absolute; top:2px; right:2px; width:14px; height:14px; background:rgba(0,0,0,.75); border-radius:50%; display:none; align-items:center; justify-content:center; font-size:8px; color:#f88; cursor:pointer; }
+.res-thumb:hover .res-del { display:flex; }
 
 /* ── AVATAR UPLOAD MODAL ── */
-#av-modal {
-  position: fixed; inset: 0; z-index: 70;
-  background: rgba(0,0,0,0.78); backdrop-filter: blur(6px);
-  display: none; align-items: center; justify-content: center;
-}
-#av-modal.open { display: flex; }
-#av-modal-box {
-  background: rgba(10,6,2,0.97); border: 1px solid var(--border);
-  border-radius: 10px; padding: 20px; width: 280px;
-  display: flex; flex-direction: column; gap: 12px;
-  animation: handout-enter 0.25s cubic-bezier(0.34,1.56,0.64,1) both;
-  box-shadow: 0 0 40px rgba(0,0,0,0.8);
-}
-#av-modal-title {
-  font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.15em;
-  text-transform: uppercase; color: var(--gold); text-align: center;
-}
-#av-drop-zone {
-  border: 2px dashed var(--border); border-radius: 8px;
-  padding: 24px 12px; text-align: center;
-  cursor: pointer; transition: border-color 0.2s, background 0.2s;
-  display: flex; flex-direction: column; gap: 6px; align-items: center;
-}
-#av-drop-zone:hover, #av-drop-zone.drag-over {
-  border-color: var(--gold-dim); background: rgba(200,169,110,0.06);
-}
-#av-drop-zone span { font-size: 11px; color: var(--text-dim); }
-#av-drop-zone strong { font-family: 'Cinzel', serif; font-size: 10px; color: var(--gold-dim); }
-#av-preview-wrap { display: none; justify-content: center; }
-#av-preview { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid var(--blood); box-shadow: 0 0 16px rgba(139,0,0,0.4); }
-#av-modal-btns { display: flex; gap: 8px; }
-#av-confirm, #av-cancel {
-  flex: 1; padding: 7px; border-radius: 4px; cursor: pointer;
-  font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
-}
-#av-confirm { background: rgba(80,20,0,0.7); border: 1px solid var(--border-hot); color: var(--gold); }
-#av-confirm:hover { background: rgba(139,0,0,0.6); }
-#av-confirm:disabled { opacity: 0.35; cursor: default; }
-#av-cancel  { background: rgba(20,12,4,0.7); border: 1px solid var(--border); color: var(--text-dim); }
-#av-cancel:hover { background: rgba(40,24,8,0.8); }
+#av-modal { position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.78); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; }
+#av-modal.open { display:flex; }
+#av-modal-box { background:rgba(10,6,2,.97); border:1px solid var(--border); border-radius:10px; padding:20px; width:280px; display:flex; flex-direction:column; gap:12px; animation:handout-enter .25s cubic-bezier(.34,1.56,.64,1) both; box-shadow:0 0 40px rgba(0,0,0,.8); }
+#av-modal-title { font-family:'Cinzel',serif; font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:var(--gold); text-align:center; }
+#av-drop-zone { border:2px dashed var(--border); border-radius:8px; padding:24px 12px; text-align:center; cursor:pointer; transition:border-color .2s,background .2s; display:flex; flex-direction:column; gap:6px; align-items:center; }
+#av-drop-zone:hover, #av-drop-zone.drag-over { border-color:var(--gold-dim); background:rgba(200,169,110,.06); }
+#av-drop-zone span { font-size:11px; color:var(--text-dim); }
+#av-drop-zone strong { font-family:'Cinzel',serif; font-size:10px; color:var(--gold-dim); }
+#av-preview-wrap { display:none; justify-content:center; }
+#av-preview { width:100px; height:100px; border-radius:50%; object-fit:cover; border:2px solid var(--blood); box-shadow:0 0 16px rgba(139,0,0,.4); }
+#av-modal-btns { display:flex; gap:8px; }
+#av-confirm,#av-cancel { flex:1; padding:7px; border-radius:4px; cursor:pointer; font-family:'Cinzel',serif; font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
+#av-confirm { background:rgba(80,20,0,.7); border:1px solid var(--border-hot); color:var(--gold); }
+#av-confirm:hover { background:rgba(139,0,0,.6); }
+#av-confirm:disabled { opacity:.35; cursor:default; }
+#av-cancel { background:rgba(20,12,4,.7); border:1px solid var(--border); color:var(--text-dim); }
+#av-cancel:hover { background:rgba(40,24,8,.8); }
 
-/* ── DRAG-DROP SCENE FEEDBACK ── */
-body.drag-over-scene #backdrop { outline: 3px solid var(--gold-dim); outline-offset: -3px; }
+/* ── HANDOUT ── */
+#handout-overlay { position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:50; display:none; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+#handout-overlay.visible { display:flex; }
+#handout-box { position:relative; max-width:72vw; max-height:82vh; border:2px solid var(--gold-dim); border-radius:8px; overflow:hidden; box-shadow:0 0 60px rgba(0,0,0,.8); animation:handout-enter .3s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes handout-enter { from{opacity:0;transform:scale(.85)} to{opacity:1;transform:scale(1)} }
+#handout-box img { display:block; max-width:72vw; max-height:82vh; object-fit:contain; }
+#handout-close { position:absolute; top:8px; right:8px; background:rgba(0,0,0,.7); border:1px solid #555; color:#ccc; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+#handout-close:hover { background:rgba(139,0,0,.6); }
+
+/* ── DICE ROW ── */
+#dice-row { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:15; display:flex; flex-direction:row; align-items:center; gap:4px; }
+.die-btn { background:none; border:none; cursor:pointer; padding:2px; border-radius:4px; display:flex; align-items:center; justify-content:center; transition:transform .15s,filter .15s; }
+.die-btn:hover  { transform:scale(1.18); filter:drop-shadow(0 0 5px rgba(200,169,110,.6)); }
+.die-btn:active { transform:scale(.92); }
+.die-btn svg { width:44px; height:44px; display:block; }
+.die-poly      { fill:var(--dice-fill); stroke:var(--dice-stroke); stroke-width:2.5; }
+.die-poly-rect { fill:var(--dice-fill); stroke:var(--dice-stroke); stroke-width:2.5; }
+.die-inner-line{ stroke:var(--dice-stroke); stroke-width:1.2; fill:none; opacity:.45; }
+.die-label     { fill:var(--dice-stroke); font-family:'Cinzel',serif; font-size:12px; font-weight:600; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+
+/* ── DICE LOG ── */
+#dice-log { position:fixed; bottom:80px; right:16px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:160px; }
+body.panel-open #dice-log { right:296px; }
+.log-entry { font-family:'Cinzel',serif; font-size:11px; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,1); text-align:right; white-space:nowrap; animation:log-in .2s ease both; }
+.log-entry.old { color:var(--gold-dim); font-size:10px; }
+@keyframes log-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── DRAG SCENE FEEDBACK ── */
+body.drag-over-scene #backdrop { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
 /* ── PEER STATUS ── */
-#peer-status {
-  position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
-  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 20px; padding: 3px 14px;
-  font-size: 9px; letter-spacing: 0.1em; color: var(--text-dim);
-  z-index: 60; pointer-events: none;
-  font-family: 'Cinzel', serif; text-transform: uppercase; transition: color 0.3s;
-}
-#peer-status.connected { color: #5a9; }
-#peer-status.error     { color: #a55; }
+#peer-status { position:fixed; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.07); border-radius:20px; padding:3px 14px; font-size:9px; letter-spacing:.1em; color:var(--text-dim); z-index:60; pointer-events:none; font-family:'Cinzel',serif; text-transform:uppercase; transition:color .3s; }
+#peer-status.connected { color:#5a9; }
+#peer-status.error     { color:#a55; }
 
 /* ── TEST PANEL ── */
-#test-panel {
-  position: fixed; left: 0; top: 0; bottom: 0; width: 190px;
-  background: rgba(2,6,14,0.93); border-right: 1px solid rgba(30,60,100,0.5);
-  z-index: 55; padding: 12px; display: none; flex-direction: column; gap: 7px;
-  font-family: 'Courier New', monospace; font-size: 11px; color: #5a8aaa;
-}
-#test-panel h2 { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.15em; color: #7aade0; text-transform: uppercase; border-bottom: 1px solid rgba(30,60,100,0.5); padding-bottom: 6px; }
-#test-panel label { font-size: 9px; color: #3a6a8a; text-transform: uppercase; letter-spacing: 0.08em; }
-.tp-input { width: 100%; background: rgba(0,8,20,0.8); border: 1px solid rgba(30,60,100,0.6); border-radius: 3px; color: #8ab8d8; padding: 4px 6px; font-family: 'Courier New', monospace; font-size: 10px; outline: none; }
-.tp-btn { width: 100%; background: rgba(10,30,60,0.7); border: 1px solid rgba(30,80,140,0.5); border-radius: 3px; color: #6a9ec0; padding: 5px; font-family: 'Courier New', monospace; font-size: 10px; cursor: pointer; text-align: left; transition: background 0.15s; }
-.tp-btn:hover { background: rgba(20,60,100,0.8); }
-#tp-status { font-size: 9px; color: #2a5a7a; word-break: break-all; line-height: 1.4; min-height: 28px; }
-#tp-code { font-size: 10px; color: #4a9ac0; letter-spacing: 0.05em; word-break: break-all; }
-.tp-divider { border: none; border-top: 1px solid rgba(30,60,100,0.4); margin: 2px 0; }
-body.browser-mode #dm-avatar-wrap { left: 206px; }
-body.browser-mode #upper-zone, body.browser-mode #lower-zone { padding-left: 306px; }
-body.browser-mode #dice-row { left: calc(50% + 95px); }
+#test-panel { position:fixed; left:0; top:0; bottom:0; width:190px; background:rgba(2,6,14,.93); border-right:1px solid rgba(30,60,100,.5); z-index:55; padding:12px; display:none; flex-direction:column; gap:7px; font-family:'Courier New',monospace; font-size:11px; color:#5a8aaa; }
+#test-panel h2 { font-family:'Cinzel',serif; font-size:10px; letter-spacing:.15em; color:#7aade0; text-transform:uppercase; border-bottom:1px solid rgba(30,60,100,.5); padding-bottom:6px; }
+#test-panel label { font-size:9px; color:#3a6a8a; text-transform:uppercase; letter-spacing:.08em; }
+.tp-input { width:100%; background:rgba(0,8,20,.8); border:1px solid rgba(30,60,100,.6); border-radius:3px; color:#8ab8d8; padding:4px 6px; font-family:'Courier New',monospace; font-size:10px; outline:none; }
+.tp-btn { width:100%; background:rgba(10,30,60,.7); border:1px solid rgba(30,80,140,.5); border-radius:3px; color:#6a9ec0; padding:5px; font-family:'Courier New',monospace; font-size:10px; cursor:pointer; text-align:left; transition:background .15s; }
+.tp-btn:hover { background:rgba(20,60,100,.8); }
+#tp-status { font-size:9px; color:#2a5a7a; word-break:break-all; line-height:1.4; min-height:28px; }
+#tp-code { font-size:10px; color:#4a9ac0; letter-spacing:.05em; word-break:break-all; }
+.tp-divider { border:none; border-top:1px solid rgba(30,60,100,.4); margin:2px 0; }
+body.browser-mode #dm-avatar-wrap { left:206px; }
+body.browser-mode #upper-zone, body.browser-mode #lower-zone { padding-left:306px; }
+body.browser-mode #dice-row { left:calc(50% + 95px); }
 </style>
 </head>
 <body>
 
-<!-- COMBAT OVERLAY -->
 <div id="combat-overlay"></div>
-
-<!-- BACKDROP -->
 <div id="backdrop"><div id="backdrop-vignette"></div></div>
 
-<!-- DM AVATAR -->
 <div id="dm-avatar-wrap">
-  <div id="dm-av-frame" title="Upload DM Avatar">
-    <div class="av-placeholder">👁</div>
-  </div>
+  <div id="dm-av-frame" title="Upload DM Avatar"><div class="av-placeholder">👁</div></div>
   <span id="dm-label">DM</span>
 </div>
 <input type="file" id="upload-dm-avatar" accept="image/*" style="display:none">
 
-<!-- AVATAR UPLOAD MODAL -->
 <div id="av-modal">
   <div id="av-modal-box">
     <div id="av-modal-title">Set DM Avatar</div>
-    <div id="av-drop-zone">
-      <strong>Drop image here</strong>
-      <span>or click to browse</span>
-    </div>
+    <div id="av-drop-zone"><strong>Drop image here</strong><span>or click to browse</span></div>
     <div id="av-preview-wrap"><img id="av-preview" src="" alt="Preview"></div>
     <div id="av-modal-btns">
       <button id="av-confirm" disabled>Set Avatar</button>
@@ -392,130 +215,46 @@ body.browser-mode #dice-row { left: calc(50% + 95px); }
   </div>
 </div>
 
-<!-- UPPER ZONE — NPCs / Monsters -->
 <div id="upper-zone"></div>
-
-<!-- LOWER ZONE — Players -->
 <div id="lower-zone"></div>
+<div id="combat-arena"></div>
 
-<!-- DICE ROW -->
 <div id="dice-row">
-  <!-- d4 -->
-  <button class="die-btn" data-sides="4" title="Roll d4">
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="30,5 56,52 4,52" class="die-poly"/>
-      <line x1="30" y1="5" x2="30" y2="52" class="die-inner-line"/>
-      <text x="30" y="42" class="die-label">d4</text>
-    </svg>
-  </button>
-  <!-- d6 -->
-  <button class="die-btn" data-sides="6" title="Roll d6">
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <rect x="7" y="7" width="46" height="46" rx="6" class="die-poly-rect"/>
-      <text x="30" y="33" class="die-label">d6</text>
-    </svg>
-  </button>
-  <!-- d8 -->
-  <button class="die-btn" data-sides="8" title="Roll d8">
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="30,4 56,30 30,56 4,30" class="die-poly"/>
-      <line x1="4" y1="30" x2="56" y2="30" class="die-inner-line"/>
-      <line x1="30" y1="4" x2="30" y2="56" class="die-inner-line"/>
-      <text x="30" y="33" class="die-label">d8</text>
-    </svg>
-  </button>
-  <!-- d10 -->
-  <button class="die-btn" data-sides="10" title="Roll d10">
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="30,4 52,20 46,52 14,52 8,20" class="die-poly"/>
-      <text x="30" y="35" class="die-label">d10</text>
-    </svg>
-  </button>
-  <!-- d12 -->
-  <button class="die-btn" data-sides="12" title="Roll d12">
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="30,4 50,14 57,36 42,54 18,54 3,36 10,14" class="die-poly"/>
-      <text x="30" y="35" class="die-label">d12</text>
-    </svg>
-  </button>
-  <!-- d20 -->
-  <button class="die-btn" data-sides="20" title="Roll d20">
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="30,4 54,17 54,43 30,56 6,43 6,17" class="die-poly"/>
-      <line x1="6"  y1="17" x2="54" y2="17" class="die-inner-line"/>
-      <line x1="6"  y1="43" x2="54" y2="43" class="die-inner-line"/>
-      <text x="30" y="35" class="die-label">d20</text>
-    </svg>
-  </button>
-  <!-- d100 -->
-  <button class="die-btn" data-sides="100" title="Roll d100">
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="30,4 52,20 46,52 14,52 8,20" class="die-poly"/>
-      <text x="30" y="35" class="die-label" style="font-size:9px">d100</text>
-    </svg>
-  </button>
+  <button class="die-btn" data-sides="4"   title="d4">  <svg viewBox="0 0 60 60"><polygon points="30,5 56,52 4,52"              class="die-poly"/><line x1="30" y1="5" x2="30" y2="52" class="die-inner-line"/><text x="30" y="42" class="die-label">d4</text></svg></button>
+  <button class="die-btn" data-sides="6"   title="d6">  <svg viewBox="0 0 60 60"><rect x="7" y="7" width="46" height="46" rx="6"  class="die-poly-rect"/><text x="30" y="33" class="die-label">d6</text></svg></button>
+  <button class="die-btn" data-sides="8"   title="d8">  <svg viewBox="0 0 60 60"><polygon points="30,4 56,30 30,56 4,30"          class="die-poly"/><line x1="4" y1="30" x2="56" y2="30" class="die-inner-line"/><line x1="30" y1="4" x2="30" y2="56" class="die-inner-line"/><text x="30" y="33" class="die-label">d8</text></svg></button>
+  <button class="die-btn" data-sides="10"  title="d10"> <svg viewBox="0 0 60 60"><polygon points="30,4 52,20 46,52 14,52 8,20"    class="die-poly"/><text x="30" y="35" class="die-label">d10</text></svg></button>
+  <button class="die-btn" data-sides="12"  title="d12"> <svg viewBox="0 0 60 60"><polygon points="30,4 50,14 57,36 42,54 18,54 3,36 10,14" class="die-poly"/><text x="30" y="35" class="die-label">d12</text></svg></button>
+  <button class="die-btn" data-sides="20"  title="d20"> <svg viewBox="0 0 60 60"><polygon points="30,4 54,17 54,43 30,56 6,43 6,17" class="die-poly"/><line x1="6" y1="17" x2="54" y2="17" class="die-inner-line"/><line x1="6" y1="43" x2="54" y2="43" class="die-inner-line"/><text x="30" y="35" class="die-label">d20</text></svg></button>
+  <button class="die-btn" data-sides="100" title="d100"><svg viewBox="0 0 60 60"><polygon points="30,4 52,20 46,52 14,52 8,20"    class="die-poly"/><text x="30" y="35" class="die-label" style="font-size:9px">d100</text></svg></button>
 </div>
 
-<!-- DICE LOG -->
 <div id="dice-log"></div>
 
-<!-- TOOLBAR -->
 <div id="toolbar">
   <button class="tbtn" id="btn-screen"  title="DM Screen">🗂</button>
   <button class="tbtn" id="btn-combat"  title="Combat Mode">⚔️</button>
   <button class="tbtn" id="btn-handout" title="Quick Handout">📜</button>
 </div>
 
-<!-- DM SCREEN -->
 <div id="dm-screen">
   <div id="dm-screen-head">
     <span>DM Screen</span>
     <button class="tbtn" id="btn-close-screen" style="width:24px;height:24px;font-size:11px">✕</button>
   </div>
   <div id="dm-screen-body">
-
-    <div class="ds-section">
-      <div class="ds-head">
-        <h3>Backdrops</h3>
-        <button class="upload-btn" data-cat="backdrops">📁 Upload</button>
-      </div>
-      <div class="res-grid" id="lib-backdrops"></div>
-    </div>
-
-    <div class="ds-section">
-      <div class="ds-head">
-        <h3>Players</h3>
-        <button class="upload-btn" data-cat="players">📁 Upload</button>
-      </div>
-      <div class="res-grid" id="lib-players"></div>
-    </div>
-
-    <div class="ds-section">
-      <div class="ds-head">
-        <h3>NPCs &amp; Monsters</h3>
-        <button class="upload-btn" data-cat="npcs">📁 Upload</button>
-      </div>
-      <div class="res-grid" id="lib-npcs"></div>
-    </div>
-
-    <div class="ds-section">
-      <div class="ds-head">
-        <h3>Handouts</h3>
-        <button class="upload-btn" data-cat="handouts">📁 Upload</button>
-      </div>
-      <div class="res-grid" id="lib-handouts"></div>
-    </div>
-
+    <div class="ds-section"><div class="ds-head"><h3>Backdrops</h3><button class="upload-btn" data-cat="backdrops">📁 Upload</button></div><div class="res-grid" id="lib-backdrops"></div></div>
+    <div class="ds-section"><div class="ds-head"><h3>Players</h3><button class="upload-btn" data-cat="players">📁 Upload</button></div><div class="res-grid" id="lib-players"></div></div>
+    <div class="ds-section"><div class="ds-head"><h3>NPCs &amp; Monsters</h3><button class="upload-btn" data-cat="npcs">📁 Upload</button></div><div class="res-grid" id="lib-npcs"></div></div>
+    <div class="ds-section"><div class="ds-head"><h3>Handouts</h3><button class="upload-btn" data-cat="handouts">📁 Upload</button></div><div class="res-grid" id="lib-handouts"></div></div>
   </div>
 </div>
 
-<!-- Hidden file inputs for each category -->
 <input type="file" id="upload-backdrops" accept="image/*" multiple style="display:none">
 <input type="file" id="upload-players"   accept="image/*" multiple style="display:none">
 <input type="file" id="upload-npcs"      accept="image/*" multiple style="display:none">
 <input type="file" id="upload-handouts"  accept="image/*" multiple style="display:none">
 
-<!-- HANDOUT OVERLAY -->
 <div id="handout-overlay">
   <div id="handout-box">
     <button id="handout-close">✕</button>
@@ -523,15 +262,13 @@ body.browser-mode #dice-row { left: calc(50% + 95px); }
   </div>
 </div>
 
-<!-- PEER STATUS -->
 <div id="peer-status">Initialising…</div>
 
-<!-- TEST PANEL -->
 <div id="test-panel">
   <h2>DooM Theatre</h2>
   <div id="tp-status">Disconnected</div>
   <label>DM Avatar</label>
-  <div id="tp-av-wrap" title="Set DM avatar before hosting" style="width:64px;height:64px;border-radius:50%;border:2px dashed rgba(30,60,100,0.6);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#3a6a8a;font-size:28px;margin:0 auto;flex-shrink:0;">👁</div>
+  <div id="tp-av-wrap" title="Set DM avatar before hosting" style="width:64px;height:64px;border-radius:50%;border:2px dashed rgba(30,60,100,.6);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#3a6a8a;font-size:28px;margin:0 auto;flex-shrink:0;">👁</div>
   <input type="file" id="tp-av-file" accept="image/*" style="display:none">
   <button class="tp-btn" id="tp-host">▶ Host Session</button>
   <hr class="tp-divider">
@@ -548,399 +285,369 @@ body.browser-mode #dice-row { left: calc(50% + 95px); }
 <script>
 'use strict';
 
-// ── CONFIG ───────────────────────────────────────────────────────
-const CFG = {
-  peerHost: 'peerjs.ftplimits.xyz',
-  peerPort: 443, peerPath: '/peerjs', peerSecure: true,
-};
+// ── CONSTANTS ────────────────────────────────────────────────────
+const CFG  = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs', peerSecure:true };
+const CELL = 100;   // combat grid cell size px
+const AV   = 200;   // normal avatar size px
 
 // ── STATE ────────────────────────────────────────────────────────
 let S = {
-  backdrop: null, dmAvatar: null,
-  players: [], npcs: [],
-  combatMode: false,
-  library: { backdrops: [], players: [], npcs: [], handouts: [] }
+  backdrop:null, dmAvatar:null,
+  players:[], npcs:[],
+  combatMode:false,
+  library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
 
 // ── SESSION ──────────────────────────────────────────────────────
-let isHost = false, isDiscord = false, roomCode = null;
-let myPeer = null, hostConn = null, guestConns = [];
-let dragAsset = null;
+let isHost=false, isDiscord=false, roomCode=null;
+let myPeer=null, hostConn=null, guestConns=[];
+let dragAsset=null;
 
 // ── UTIL ─────────────────────────────────────────────────────────
-const uid = () => Math.random().toString(36).slice(2, 9);
+const uid = () => Math.random().toString(36).slice(2,9);
 const el  = id => document.getElementById(id);
+const snap = v => Math.round(v / CELL) * CELL;
+const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
 
-function setStatus(msg, cls='') { const s=el('peer-status'); s.textContent=msg; s.className=cls; }
-function setTPStatus(msg) { el('tp-status').textContent = msg; }
-function setPeerCount() { el('tp-peers').textContent = `Peers: ${guestConns.length}`; }
+function setStatus(msg,cls='') { const s=el('peer-status'); s.textContent=msg; s.className=cls; }
+function setTPStatus(msg) { el('tp-status').textContent=msg; }
+function setPeerCount()   { el('tp-peers').textContent=`Peers: ${guestConns.length}`; }
 
 function fileToDataURL(file) {
-  return new Promise(resolve => {
-    const r = new FileReader();
-    r.onload = e => resolve(e.target.result);
-    r.readAsDataURL(file);
-  });
+  return new Promise(r => { const fr=new FileReader(); fr.onload=e=>r(e.target.result); fr.readAsDataURL(file); });
 }
-
-async function toWebP(file, quality = 0.9) {
+async function toWebP(file, q=0.9) {
   const raw = await fileToDataURL(file);
-  return new Promise(resolve => {
-    const img = new Image();
+  return new Promise(r => {
+    const img=new Image();
     img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth; c.height = img.naturalHeight;
-      c.getContext('2d').drawImage(img, 0, 0);
-      const webp = c.toDataURL('image/webp', quality);
-      // Fall back to original if browser doesn't support webp export
-      resolve(webp.startsWith('data:image/webp') ? webp : raw);
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth; c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      const out=c.toDataURL('image/webp',q);
+      r(out.startsWith('data:image/webp') ? out : raw);
     };
-    img.src = raw;
+    img.src=raw;
   });
 }
-
-function fileBaseName(file) {
-  return file.name.replace(/\.[^.]+$/, '');
-}
+function fileBaseName(f) { return f.name.replace(/\.[^.]+$/,''); }
 
 // ── DISCORD ──────────────────────────────────────────────────────
 function detectDiscord() {
-  const p = new URLSearchParams(window.location.search);
-  const id = p.get('instance_id') || p.get('instanceId');
+  const p=new URLSearchParams(window.location.search);
+  const id=p.get('instance_id')||p.get('instanceId');
   if (id) { isDiscord=true; roomCode=id; window.parent.postMessage({cmd:'ready'},'*'); return true; }
   return false;
 }
 
 // ── PEERJS ───────────────────────────────────────────────────────
 function makePeer(id) {
-  return new Promise((resolve, reject) => {
-    const opts = { host:CFG.peerHost, port:CFG.peerPort, path:CFG.peerPath, secure:CFG.peerSecure };
-    const p = id ? new Peer(id, opts) : new Peer(opts);
-    p.on('open', () => resolve(p));
-    p.on('error', reject);
+  return new Promise((res,rej) => {
+    const opts={host:CFG.peerHost,port:CFG.peerPort,path:CFG.peerPath,secure:CFG.peerSecure};
+    const p=id?new Peer(id,opts):new Peer(opts);
+    p.on('open',()=>res(p)); p.on('error',rej);
   });
 }
-
-function wireConn(conn, asHost) {
-  conn.on('data', msg => handleMsg(msg, asHost ? conn : null));
-  conn.on('close', () => {
-    if (asHost) { guestConns = guestConns.filter(c => c !== conn); setPeerCount(); setStatus(`${guestConns.length} connected`, guestConns.length ? 'connected' : ''); }
+function wireConn(conn,asHost) {
+  conn.on('data', msg=>handleMsg(msg, asHost?conn:null));
+  conn.on('close',()=>{
+    if(asHost){ guestConns=guestConns.filter(c=>c!==conn); setPeerCount(); setStatus(`${guestConns.length} connected`,guestConns.length?'connected':''); }
     else { setStatus('Host disconnected','error'); setTPStatus('Disconnected'); }
   });
-  conn.on('error', e => console.error('conn error',e));
+  conn.on('error',e=>console.error('conn',e));
 }
-
 async function doHost() {
-  isHost = true; setStatus('Connecting…');
-  try { myPeer = await makePeer(roomCode); }
-  catch(e) { setStatus('Local only (no relay)','error'); renderAll(); return; }
-  myPeer.on('connection', conn => {
-    guestConns.push(conn); wireConn(conn, true);
-    conn.on('open', () => { conn.send({type:'full_state',state:S}); setPeerCount(); setStatus(`${guestConns.length} connected`,'connected'); });
-  });
+  isHost=true; setStatus('Connecting…');
+  try { myPeer=await makePeer(roomCode); }
+  catch(e) { setStatus('Local only','error'); renderAll(); return; }
+  myPeer.on('connection',conn=>{ guestConns.push(conn); wireConn(conn,true); conn.on('open',()=>{ conn.send({type:'full_state',state:S}); setPeerCount(); setStatus(`${guestConns.length} connected`,'connected'); }); });
   setStatus('Hosting','connected');
-  el('tp-code').textContent = roomCode;
+  el('tp-code').textContent=roomCode;
   setTPStatus('Hosting');
   renderAll();
 }
-
 async function doJoin(code) {
-  roomCode = code; setStatus('Connecting…');
-  try { myPeer = await makePeer(null); }
+  roomCode=code; setStatus('Connecting…');
+  try { myPeer=await makePeer(null); }
   catch(e) { setStatus('PeerJS unavailable','error'); return; }
-  hostConn = myPeer.connect(code);
-  wireConn(hostConn, false);
-  hostConn.on('open', () => { setStatus('Connected','connected'); setTPStatus('Joined: '+code); });
+  hostConn=myPeer.connect(code);
+  wireConn(hostConn,false);
+  hostConn.on('open',()=>{ setStatus('Connected','connected'); setTPStatus('Joined: '+code); });
 }
-
-function send(msg) {
-  if (isHost) handleMsg(msg, null);
-  else if (hostConn?.open) hostConn.send(msg);
-}
-
-function broadcast(msg, exclude) {
-  guestConns.forEach(c => { if (c !== exclude && c.open) c.send(msg); });
-}
+function send(msg) { if(isHost) handleMsg(msg,null); else if(hostConn?.open) hostConn.send(msg); }
+function broadcast(msg,exc) { guestConns.forEach(c=>{ if(c!==exc&&c.open) c.send(msg); }); }
 
 // ── MESSAGES ─────────────────────────────────────────────────────
-function handleMsg(msg, fromConn) {
-  switch (msg.type) {
-    case 'full_state':    S = msg.state; renderAll(); break;
-    case 'set_backdrop':  S.backdrop = msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
-    case 'set_dm_avatar': S.dmAvatar = msg.url; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
+function handleMsg(msg,fromConn) {
+  switch(msg.type) {
+    case 'full_state':    S=msg.state; renderAll(); break;
+    case 'set_backdrop':  S.backdrop=msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_dm_avatar': S.dmAvatar=msg.url; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
     case 'add_player':    S.players.push(msg.player); renderLowerZone(); if(isHost) broadcast(msg,fromConn); break;
-    case 'remove_player': S.players = S.players.filter(p=>p.id!==msg.id); renderLowerZone(); if(isHost) broadcast(msg,fromConn); break;
+    case 'remove_player': S.players=S.players.filter(p=>p.id!==msg.id); renderLowerZone(); if(S.combatMode) renderCombatArena(); if(isHost) broadcast(msg,fromConn); break;
     case 'add_npc':       S.npcs.push(msg.npc); renderUpperZone(); if(isHost) broadcast(msg,fromConn); break;
-    case 'remove_npc':    S.npcs = S.npcs.filter(n=>n.id!==msg.id); renderUpperZone(); if(isHost) broadcast(msg,fromConn); break;
-    case 'set_combat':    S.combatMode = msg.active; applyCombat(); if(isHost) broadcast(msg,fromConn); break;
-    case 'show_handout':  showHandout(msg.url); if(isHost) broadcast(msg,fromConn); break;
+    case 'remove_npc':    S.npcs=S.npcs.filter(n=>n.id!==msg.id); renderUpperZone(); if(S.combatMode) renderCombatArena(); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_combat':    S.combatMode=msg.active; applyCombat(); if(isHost) broadcast(msg,fromConn); break;
+    case 'combat_move': {
+      const arr=msg.entityType==='player'?S.players:S.npcs;
+      const obj=arr.find(o=>o.id===msg.id);
+      if(obj){obj.cx=msg.cx;obj.cy=msg.cy;}
+      if(S.combatMode) renderCombatArena();
+      if(isHost) broadcast(msg,fromConn);
+      break;
+    }
+    case 'show_handout':    showHandout(msg.url); if(isHost) broadcast(msg,fromConn); break;
     case 'dismiss_handout': dismissHandout(); if(isHost) broadcast(msg,fromConn); break;
-    case 'sync_library':  S.library = msg.library; renderLibraries(); break;
-    case 'dice_roll':     addLogEntry(msg.sides, msg.result, msg.name); if(isHost) broadcast(msg,fromConn); break;
+    case 'sync_library':    S.library=msg.library; renderLibraries(); break;
+    case 'dice_roll':       addLogEntry(msg.sides,msg.result,msg.name); if(isHost) broadcast(msg,fromConn); break;
   }
 }
 
 // ── RENDER ───────────────────────────────────────────────────────
 function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); applyCombat(); renderLibraries(); }
 
-function renderBackdrop() {
-  el('backdrop').style.backgroundImage = S.backdrop ? `url('${S.backdrop}')` : '';
-}
+function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
+function renderDmAvatar()  { el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`; }
 
-function renderDmAvatar() {
-  el('dm-av-frame').innerHTML = S.dmAvatar
-    ? `<img src="${S.dmAvatar}" alt="DM">`
-    : `<div class="av-placeholder">👁</div>`;
-}
-
-function makeAvatarEl(obj, removeType) {
-  const wrap = document.createElement('div'); wrap.className='av-wrap';
-  const frame = document.createElement('div'); frame.className='av-frame';
-  frame.innerHTML = obj.avatar ? `<img src="${obj.avatar}" alt="${obj.name}">` : `<div class="av-placeholder">👤</div>`;
-  const label = document.createElement('div'); label.className='av-label'; label.textContent = obj.name||'';
+function makeAvatarEl(obj,removeType) {
+  const wrap=document.createElement('div'); wrap.className='av-wrap';
+  const frame=document.createElement('div'); frame.className='av-frame';
+  if(obj.flipped) frame.classList.add('flipped');
+  frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
+  const label=document.createElement('div'); label.className='av-label'; label.textContent=obj.name||'';
   wrap.appendChild(frame); wrap.appendChild(label);
-  if (isHost) {
-    frame.addEventListener('contextmenu', e => { e.preventDefault(); if(confirm(`Remove "${obj.name}"?`)) send({type:removeType, id:obj.id}); });
+  if(isHost) frame.addEventListener('contextmenu',e=>{ e.preventDefault(); if(confirm(`Remove "${obj.name}"?`)) send({type:removeType,id:obj.id}); });
+  return wrap;
+}
+function renderUpperZone() { const z=el('upper-zone'); z.innerHTML=''; S.npcs.forEach(n=>z.appendChild(makeAvatarEl(n,'remove_npc'))); }
+function renderLowerZone() { const z=el('lower-zone'); z.innerHTML=''; S.players.forEach(p=>z.appendChild(makeAvatarEl(p,'remove_player'))); }
+
+// ── COMBAT ───────────────────────────────────────────────────────
+function assignCombatPositions() {
+  const W=window.innerWidth, H=window.innerHeight;
+  // Left battle line: rightmost grid column in left half, vertically centered
+  const playerX = snap(W/2) - CELL*2;   // two cells left of center
+  const npcX    = snap(W/2) + CELL;     // one cell right of center
+
+  S.players.forEach((p,i)=>{
+    if(p.cx==null) {
+      const totalH=S.players.length*CELL;
+      p.cx=clamp(playerX, 0, W-CELL);
+      p.cy=clamp(snap(H/2)-snap(totalH/2)+i*CELL, 0, H-CELL);
+    }
+  });
+  S.npcs.forEach((n,i)=>{
+    if(n.cx==null) {
+      const totalH=S.npcs.length*CELL;
+      n.cx=clamp(npcX, 0, W-CELL);
+      n.cy=clamp(snap(H/2)-snap(S.npcs.length*CELL/2)+i*CELL, 0, H-CELL);
+    }
+  });
+}
+
+function makeCombatAv(obj, entityType) {
+  const wrap=document.createElement('div'); wrap.className='ca-wrap';
+  wrap.style.left=obj.cx+'px';
+  wrap.style.top =obj.cy+'px';
+
+  const frame=document.createElement('div'); frame.className='ca-frame';
+  if(obj.flipped) frame.classList.add('flipped');
+  frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
+
+  const label=document.createElement('div'); label.className='ca-label'; label.textContent=obj.name||'';
+  wrap.appendChild(frame); wrap.appendChild(label);
+
+  if(isHost) {
+    // Drag
+    frame.addEventListener('mousedown', e=>{
+      if(e.button!==0) return;
+      e.preventDefault();
+      combatDragStart(e, wrap, entityType, obj);
+    });
+    // Remove
+    frame.addEventListener('contextmenu', e=>{ e.preventDefault(); if(confirm(`Remove "${obj.name}"?`)) send({type:entityType==='player'?'remove_player':'remove_npc', id:obj.id}); });
   }
   return wrap;
 }
 
-function renderUpperZone() { const z=el('upper-zone'); z.innerHTML=''; S.npcs.forEach(n=>z.appendChild(makeAvatarEl(n,'remove_npc'))); }
-function renderLowerZone() { const z=el('lower-zone'); z.innerHTML=''; S.players.forEach(p=>z.appendChild(makeAvatarEl(p,'remove_player'))); }
-function applyCombat()     { document.body.classList.toggle('combat',S.combatMode); el('btn-combat').classList.toggle('active',S.combatMode); }
+function renderCombatArena() {
+  const arena=el('combat-arena'); arena.innerHTML='';
+  S.players.forEach(p=>arena.appendChild(makeCombatAv(p,'player')));
+  S.npcs.forEach(n=>arena.appendChild(makeCombatAv(n,'npc')));
+}
+
+function applyCombat() {
+  document.body.classList.toggle('combat', S.combatMode);
+  el('btn-combat').classList.toggle('active', S.combatMode);
+  if(S.combatMode) { assignCombatPositions(); renderCombatArena(); }
+}
+
+// ── COMBAT DRAG ──────────────────────────────────────────────────
+let cDrag=null;  // {wrap, entityType, obj, startMX, startMY, startCX, startCY}
+
+function combatDragStart(e, wrap, entityType, obj) {
+  cDrag={wrap, entityType, obj, startMX:e.clientX, startMY:e.clientY, startCX:obj.cx, startCY:obj.cy};
+  wrap.classList.add('dragging');
+}
+
+document.addEventListener('mousemove', e=>{
+  if(!cDrag) return;
+  const dx=e.clientX-cDrag.startMX, dy=e.clientY-cDrag.startMY;
+  cDrag.wrap.style.left=(cDrag.startCX+dx)+'px';
+  cDrag.wrap.style.top =(cDrag.startCY+dy)+'px';
+});
+
+document.addEventListener('mouseup', e=>{
+  if(!cDrag) return;
+  const W=window.innerWidth, H=window.innerHeight;
+  const dx=e.clientX-cDrag.startMX, dy=e.clientY-cDrag.startMY;
+  // 50% grid snap (Math.round = snaps at half-cell boundary)
+  const cx=clamp(snap(cDrag.startCX+dx), 0, W-CELL);
+  const cy=clamp(snap(cDrag.startCY+dy), 0, H-CELL);
+  cDrag.wrap.style.left=cx+'px';
+  cDrag.wrap.style.top =cy+'px';
+  cDrag.wrap.classList.remove('dragging');
+  // Commit to state
+  cDrag.obj.cx=cx; cDrag.obj.cy=cy;
+  send({type:'combat_move', entityType:cDrag.entityType, id:cDrag.obj.id, cx, cy});
+  cDrag=null;
+});
+
+// ── HANDOUT ──────────────────────────────────────────────────────
 function showHandout(url)  { el('handout-img').src=url; el('handout-overlay').classList.add('visible'); }
 function dismissHandout()  { el('handout-overlay').classList.remove('visible'); el('handout-img').src=''; }
 
 // ── LIBRARIES ────────────────────────────────────────────────────
 function renderLibraries() {
-  buildLib('lib-backdrops', S.library.backdrops, applyBackdrop);
-  buildLib('lib-players',   S.library.players,   applyPlayer);
-  buildLib('lib-npcs',      S.library.npcs,       applyNpc);
-  buildLib('lib-handouts',  S.library.handouts,   applyHandout);
+  buildLib('lib-backdrops',S.library.backdrops,applyBackdrop);
+  buildLib('lib-players',  S.library.players,  applyPlayer);
+  buildLib('lib-npcs',     S.library.npcs,      applyNpc);
+  buildLib('lib-handouts', S.library.handouts,  applyHandout);
 }
-
-function buildLib(containerId, items, clickFn) {
-  const catMap = {'lib-backdrops':'backdrops','lib-players':'players','lib-npcs':'npcs','lib-handouts':'handouts'};
-  const cat = catMap[containerId];
-  const grid = el(containerId); grid.innerHTML='';
-  items.forEach((item, idx) => {
-    const thumb = document.createElement('div');
-    thumb.className = 'res-thumb'; thumb.title = item.name||'';
-    thumb.draggable = true;
-    thumb.innerHTML = `<img src="${item.url}" alt="" draggable="false"><span class="res-del">✕</span>`;
-    thumb.addEventListener('dragstart', e => {
-      dragAsset = {url: item.url, name: item.name||'', cat};
-      e.dataTransfer.effectAllowed = 'copy';
-      e.dataTransfer.setData('text/plain', cat);
-      thumb.style.opacity = '0.5';
-    });
-    thumb.addEventListener('dragend', () => {
-      dragAsset = null;
-      thumb.style.opacity = '';
-    });
-    thumb.querySelector('img').addEventListener('click', ()=>clickFn(item));
-    thumb.querySelector('.res-del').addEventListener('click', e=>{ e.stopPropagation(); removeLib(containerId,idx); });
+function buildLib(cid,items,clickFn) {
+  const catMap={'lib-backdrops':'backdrops','lib-players':'players','lib-npcs':'npcs','lib-handouts':'handouts'};
+  const cat=catMap[cid];
+  const grid=el(cid); grid.innerHTML='';
+  items.forEach((item,idx)=>{
+    const thumb=document.createElement('div'); thumb.className='res-thumb'; thumb.title=item.name||''; thumb.draggable=true;
+    thumb.innerHTML=`<img src="${item.url}" alt="" draggable="false"><span class="res-del">✕</span>`;
+    thumb.addEventListener('dragstart',e=>{ dragAsset={url:item.url,name:item.name||'',cat}; e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain',cat); thumb.style.opacity='.5'; });
+    thumb.addEventListener('dragend',  ()=>{ dragAsset=null; thumb.style.opacity=''; });
+    thumb.querySelector('img').addEventListener('click',()=>clickFn(item));
+    thumb.querySelector('.res-del').addEventListener('click',e=>{ e.stopPropagation(); removeLib(cid,idx); });
     grid.appendChild(thumb);
   });
 }
-
-function removeLib(containerId, idx) {
-  const k={['lib-backdrops']:'backdrops',['lib-players']:'players',['lib-npcs']:'npcs',['lib-handouts']:'handouts'}[containerId];
+function removeLib(cid,idx) {
+  const k={'lib-backdrops':'backdrops','lib-players':'players','lib-npcs':'npcs','lib-handouts':'handouts'}[cid];
   S.library[k].splice(idx,1); renderLibraries();
   if(isHost) broadcast({type:'sync_library',library:S.library},null);
 }
-
+async function handleUpload(files,cat) {
+  for(const f of files) { S.library[cat].push({url:await toWebP(f), name:fileBaseName(f)}); }
+  renderLibraries();
+  if(isHost) broadcast({type:'sync_library',library:S.library},null);
+}
 function applyBackdrop(item) { send({type:'set_backdrop', url:item.url}); }
 function applyHandout(item)  { send({type:'show_handout', url:item.url}); }
-function applyPlayer(item)   { send({type:'add_player', player:{id:uid(), name:item.name||'Player', avatar:item.url}}); }
-function applyNpc(item)      { send({type:'add_npc',    npc:   {id:uid(), name:item.name||'NPC',    avatar:item.url}}); }
-
-async function handleUpload(files, cat) {
-  for (const file of files) {
-    const url  = await toWebP(file);
-    const name = fileBaseName(file);
-    S.library[cat].push({url, name});
-  }
-  renderLibraries();
-  if (isHost) broadcast({type:'sync_library', library:S.library}, null);
-}
+function applyPlayer(item)   { send({type:'add_player', player:{id:uid(),name:item.name||'Player',avatar:item.url,flipped:false,cx:null,cy:null}}); }
+function applyNpc(item)      { send({type:'add_npc',    npc:  {id:uid(),name:item.name||'NPC',   avatar:item.url,flipped:false,cx:null,cy:null}}); }
 
 // ── DICE ─────────────────────────────────────────────────────────
-const diceLog = [];
-const LOG_MAX = 10;
-
-function rollDie(btn, sides) {
-  btn.classList.add('spinning');
-  setTimeout(() => btn.classList.remove('spinning'), 400);
-  const result = sides === 100
-    ? (Math.floor(Math.random()*10)*10 + Math.floor(Math.random()*10)) || 100
-    : Math.floor(Math.random() * sides) + 1;
-  send({type:'dice_roll', sides, result, name: 'DM'});
+const diceLog=[], LOG_MAX=10;
+function rollDie(btn,sides) {
+  const result=sides===100?(Math.floor(Math.random()*10)*10+Math.floor(Math.random()*10))||100:Math.floor(Math.random()*sides)+1;
+  send({type:'dice_roll',sides,result,name:'DM'});
+}
+function addLogEntry(sides,result,name) {
+  diceLog.unshift({sides,result,name}); if(diceLog.length>LOG_MAX) diceLog.pop();
+  const log=el('dice-log'); log.innerHTML='';
+  diceLog.forEach((e,i)=>{ const d=document.createElement('div'); d.className='log-entry'+(i?' old':''); d.textContent=`${e.name}: d${e.sides} → ${e.result}`; log.appendChild(d); });
 }
 
-function addLogEntry(sides, result, name) {
-  diceLog.unshift({sides, result, name});
-  if (diceLog.length > LOG_MAX) diceLog.pop();
-  renderDiceLog();
-}
-
-function renderDiceLog() {
-  const log = el('dice-log'); log.innerHTML='';
-  diceLog.forEach((entry, i) => {
-    const div = document.createElement('div');
-    div.className = 'log-entry' + (i > 0 ? ' old' : '');
-    div.textContent = `${entry.name}: d${entry.sides} → ${entry.result}`;
-    log.appendChild(div);
-  });
-}
-
-// ── RANDOM AVATAR FLIP ───────────────────────────────────────────
+// ── RANDOM FLIP ───────────────────────────────────────────────────
 function scheduleFlip() {
-  const delay = 6000 + Math.random() * 6000;
-  setTimeout(() => {
-    const frames = [...document.querySelectorAll('.av-frame')];
-    if (frames.length) {
-      frames[Math.floor(Math.random() * frames.length)].classList.toggle('flipped');
+  setTimeout(()=>{
+    const all=[...S.players,...S.npcs];
+    if(all.length) {
+      const obj=all[Math.floor(Math.random()*all.length)];
+      obj.flipped=!obj.flipped;
+      // Update DOM — works in both normal and combat mode
+      document.querySelectorAll('.av-frame,.ca-frame').forEach(fr=>{
+        // match by parent context (rough match — full re-render is cleaner but causes flicker)
+      });
+      if(S.combatMode) renderCombatArena();
+      else { renderUpperZone(); renderLowerZone(); }
     }
     scheduleFlip();
-  }, delay);
+  }, 6000+Math.random()*6000);
 }
-(async function init() {
-  const inDiscord = detectDiscord();
 
-  if (inDiscord) {
+// ── INIT ─────────────────────────────────────────────────────────
+(async function init() {
+  const inDiscord=detectDiscord();
+
+  if(inDiscord) {
     await doHost();
   } else {
     document.body.classList.add('browser-mode');
     el('test-panel').style.display='flex';
 
-    // Pre-host avatar picker
-    let pendingHostAvatar = null;
-    el('tp-av-wrap').addEventListener('click', () => el('tp-av-file').click());
-    el('tp-av-file').addEventListener('change', async e => {
-      const f = e.target.files[0]; if(!f) return;
-      pendingHostAvatar = await toWebP(f);
-      el('tp-av-wrap').innerHTML = `<img src="${pendingHostAvatar}" style="width:100%;height:100%;object-fit:cover;">`;
+    let pendingHostAvatar=null;
+    el('tp-av-wrap').addEventListener('click',()=>el('tp-av-file').click());
+    el('tp-av-file').addEventListener('change',async e=>{
+      const f=e.target.files[0]; if(!f) return;
+      pendingHostAvatar=await toWebP(f);
+      el('tp-av-wrap').innerHTML=`<img src="${pendingHostAvatar}" style="width:100%;height:100%;object-fit:cover;">`;
       e.target.value='';
     });
-
-    el('tp-host').addEventListener('click', async () => {
+    el('tp-host').addEventListener('click',async()=>{
       roomCode=uid(); el('tp-host').disabled=true;
       await doHost();
-      if (pendingHostAvatar) send({type:'set_dm_avatar', url: pendingHostAvatar});
+      if(pendingHostAvatar) send({type:'set_dm_avatar',url:pendingHostAvatar});
     });
-    el('tp-join').addEventListener('click', () => { const c=el('tp-join-code').value.trim(); if(c) doJoin(c); });
-    el('tp-join-code').addEventListener('keydown', e => { if(e.key==='Enter') el('tp-join').click(); });
+    el('tp-join').addEventListener('click',()=>{ const c=el('tp-join-code').value.trim(); if(c) doJoin(c); });
+    el('tp-join-code').addEventListener('keydown',e=>{ if(e.key==='Enter') el('tp-join').click(); });
   }
 
   scheduleFlip();
 
   // Toolbar
-  el('btn-screen').addEventListener('click', () => {
-    const open = el('dm-screen').classList.toggle('open');
-    document.body.classList.toggle('panel-open', open);
-  });
-  el('btn-close-screen').addEventListener('click', () => { el('dm-screen').classList.remove('open'); document.body.classList.remove('panel-open'); });
-  el('btn-combat').addEventListener('click', () => { if(isHost) send({type:'set_combat', active:!S.combatMode}); });
-  el('btn-handout').addEventListener('click', () => { el('upload-handouts').click(); });
+  el('btn-screen').addEventListener('click',()=>{ const open=el('dm-screen').classList.toggle('open'); document.body.classList.toggle('panel-open',open); });
+  el('btn-close-screen').addEventListener('click',()=>{ el('dm-screen').classList.remove('open'); document.body.classList.remove('panel-open'); });
+  el('btn-combat').addEventListener('click',()=>{ if(isHost) send({type:'set_combat',active:!S.combatMode}); });
+  el('btn-handout').addEventListener('click',()=>{ el('upload-handouts').click(); });
 
-  // DM Avatar — open styled modal
-  let avPendingDataURL = null;
-  el('dm-av-frame').addEventListener('click', () => { if(isHost) openAvModal(); });
-
-  function openAvModal() {
-    avPendingDataURL = null;
-    el('av-preview-wrap').style.display = 'none';
-    el('av-preview').src = '';
-    el('av-confirm').disabled = true;
-    el('av-modal').classList.add('open');
-  }
-
+  // DM Avatar modal
+  let avPending=null;
+  el('dm-av-frame').addEventListener('click',()=>{ if(isHost) openAvModal(); });
+  function openAvModal() { avPending=null; el('av-preview-wrap').style.display='none'; el('av-preview').src=''; el('av-confirm').disabled=true; el('av-modal').classList.add('open'); }
   function closeAvModal() { el('av-modal').classList.remove('open'); }
+  function setAvPreview(url) { avPending=url; el('av-preview').src=url; el('av-preview-wrap').style.display='flex'; el('av-confirm').disabled=false; }
+  el('av-drop-zone').addEventListener('click',()=>el('upload-dm-avatar').click());
+  el('av-drop-zone').addEventListener('dragover', e=>{ e.preventDefault(); el('av-drop-zone').classList.add('drag-over'); });
+  el('av-drop-zone').addEventListener('dragleave',()=>el('av-drop-zone').classList.remove('drag-over'));
+  el('av-drop-zone').addEventListener('drop',async e=>{ e.preventDefault(); e.stopPropagation(); el('av-drop-zone').classList.remove('drag-over'); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) setAvPreview(await toWebP(f)); });
+  el('upload-dm-avatar').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; setAvPreview(await toWebP(f)); e.target.value=''; });
+  el('av-confirm').addEventListener('click',()=>{ if(avPending){ send({type:'set_dm_avatar',url:avPending}); closeAvModal(); } });
+  el('av-cancel').addEventListener('click',closeAvModal);
+  el('av-modal').addEventListener('click',e=>{ if(e.target===el('av-modal')) closeAvModal(); });
 
-  function setAvPreview(dataURL) {
-    avPendingDataURL = dataURL;
-    el('av-preview').src = dataURL;
-    el('av-preview-wrap').style.display = 'flex';
-    el('av-confirm').disabled = false;
-  }
+  // Handout
+  el('handout-overlay').addEventListener('click',e=>{ if(e.target===el('handout-overlay')) send({type:'dismiss_handout'}); });
+  el('handout-close').addEventListener('click',()=>send({type:'dismiss_handout'}));
 
-  // Drop zone click → file picker
-  el('av-drop-zone').addEventListener('click', () => el('upload-dm-avatar').click());
+  // DM Screen uploads
+  document.querySelectorAll('.upload-btn').forEach(btn=>btn.addEventListener('click',()=>el('upload-'+btn.dataset.cat).click()));
+  ['backdrops','players','npcs','handouts'].forEach(cat=>{ el('upload-'+cat).addEventListener('change',async e=>{ await handleUpload(Array.from(e.target.files),cat); e.target.value=''; }); });
 
-  // Drop zone drag events
-  el('av-drop-zone').addEventListener('dragover',  e => { e.preventDefault(); el('av-drop-zone').classList.add('drag-over'); });
-  el('av-drop-zone').addEventListener('dragleave', () => el('av-drop-zone').classList.remove('drag-over'));
-  el('av-drop-zone').addEventListener('drop', async e => {
-    e.preventDefault(); e.stopPropagation();
-    el('av-drop-zone').classList.remove('drag-over');
-    const f = e.dataTransfer.files[0];
-    if (f && f.type.startsWith('image/')) setAvPreview(await toWebP(f));
-  });
-
-  el('upload-dm-avatar').addEventListener('change', async e => {
-    const f = e.target.files[0]; if(!f) return;
-    setAvPreview(await toWebP(f));
-    e.target.value='';
-  });
-
-  el('av-confirm').addEventListener('click', () => {
-    if (avPendingDataURL) { send({type:'set_dm_avatar', url:avPendingDataURL}); closeAvModal(); }
-  });
-  el('av-cancel').addEventListener('click', closeAvModal);
-  el('av-modal').addEventListener('click', e => { if(e.target===el('av-modal')) closeAvModal(); });
-
-  // Scene drag-drop (from DM screen thumbnails)
-  document.addEventListener('dragover', e => {
-    if (!dragAsset) return;
-    if (el('dm-screen').contains(e.target)) { document.body.classList.remove('drag-over-scene'); return; }
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    document.body.classList.add('drag-over-scene');
-  });
-  document.addEventListener('dragleave', e => {
-    if (!e.relatedTarget || e.relatedTarget === document.documentElement)
-      document.body.classList.remove('drag-over-scene');
-  });
-  document.addEventListener('drop', e => {
-    document.body.classList.remove('drag-over-scene');
-    if (!dragAsset) return;
-    if (el('dm-screen').contains(e.target)) return;
-    e.preventDefault();
-    const asset = dragAsset; dragAsset = null;
-    switch (asset.cat) {
-      case 'backdrops': applyBackdrop(asset); break;
-      case 'players':   applyPlayer(asset);   break;
-      case 'npcs':      applyNpc(asset);       break;
-      case 'handouts':  applyHandout(asset);   break;
-    }
-  });
-
-  // DM Screen upload buttons
-  document.querySelectorAll('.upload-btn').forEach(btn => {
-    btn.addEventListener('click', () => el('upload-' + btn.dataset.cat).click());
-  });
-
-  // Category file inputs
-  ['backdrops','players','npcs','handouts'].forEach(cat => {
-    el('upload-' + cat).addEventListener('change', async e => {
-      await handleUpload(Array.from(e.target.files), cat);
-      e.target.value='';
-    });
-  });
-
-  // Handout dismiss
-  el('handout-overlay').addEventListener('click', e => { if(e.target===el('handout-overlay')) send({type:'dismiss_handout'}); });
-  el('handout-close').addEventListener('click', () => send({type:'dismiss_handout'}));
+  // Scene drag-drop
+  document.addEventListener('dragover',e=>{ if(!dragAsset) return; if(el('dm-screen').contains(e.target)){ document.body.classList.remove('drag-over-scene'); return; } e.preventDefault(); e.dataTransfer.dropEffect='copy'; document.body.classList.add('drag-over-scene'); });
+  document.addEventListener('dragleave',e=>{ if(!e.relatedTarget||e.relatedTarget===document.documentElement) document.body.classList.remove('drag-over-scene'); });
+  document.addEventListener('drop',e=>{ document.body.classList.remove('drag-over-scene'); if(!dragAsset) return; if(el('dm-screen').contains(e.target)) return; e.preventDefault(); const a=dragAsset; dragAsset=null; switch(a.cat){ case'backdrops':applyBackdrop(a);break; case'players':applyPlayer(a);break; case'npcs':applyNpc(a);break; case'handouts':applyHandout(a);break; } });
 
   // Dice
-  document.querySelectorAll('.die-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if(!isHost && !hostConn?.open) return;
-      rollDie(btn, parseInt(btn.dataset.sides));
-    });
-  });
-
+  document.querySelectorAll('.die-btn').forEach(btn=>btn.addEventListener('click',()=>{ if(!isHost&&!hostConn?.open) return; rollDie(btn,parseInt(btn.dataset.sides)); }));
 })();
 </script>
 </body>
