@@ -441,6 +441,7 @@ function renderDmAvatar()  { el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="$
 function makeAvatarEl(obj,removeType) {
   const wrap=document.createElement('div'); wrap.className='av-wrap';
   const frame=document.createElement('div'); frame.className='av-frame';
+  frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
   const lbl=document.createElement('div'); lbl.className='av-label'; lbl.textContent=obj.name||'';
@@ -453,22 +454,21 @@ function renderLowerZone() { const z=el('lower-zone'); z.innerHTML=''; S.players
 
 // ── COMBAT ───────────────────────────────────────────────────────
 function assignCombatPositions() {
-  // Players: column at ~30% from left, stacked and vertically centered
-  const playerX = snap(GRID_W * 0.30) - CELL;
-  // NPCs: column at ~65% from left
-  const npcX    = snap(GRID_W * 0.65);
+  // 3 cells in from each edge (avatar occupies cell at index 2 from each side)
+  const playerX = 2 * CELL;               // left edge of avatar = 200px = 3rd column from left
+  const npcX    = (COLS - 3) * CELL;      // left edge of avatar = 1500px → right edge at 1600 = 2 cells from right
 
   S.players.forEach((p,i)=>{
     if(p.cx==null){
       const totalH=S.players.length*CELL;
-      p.cx=clamp(playerX, 0, GRID_W-CELL);
+      p.cx=playerX;
       p.cy=clamp(snap(GRID_H/2)-snap(totalH/2)+i*CELL, 0, GRID_H-CELL);
     }
   });
   S.npcs.forEach((n,i)=>{
     if(n.cx==null){
       const totalH=S.npcs.length*CELL;
-      n.cx=clamp(npcX, 0, GRID_W-CELL);
+      n.cx=npcX;
       n.cy=clamp(snap(GRID_H/2)-snap(totalH/2)+i*CELL, 0, GRID_H-CELL);
     }
   });
@@ -478,6 +478,7 @@ function makeCombatAv(obj, entityType) {
   const wrap=document.createElement('div'); wrap.className='ca-wrap';
   wrap.style.left=obj.cx+'px'; wrap.style.top=obj.cy+'px';
   const frame=document.createElement('div'); frame.className='ca-frame';
+  frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
   const lbl=document.createElement('div'); lbl.className='ca-label'; lbl.textContent=obj.name||'';
@@ -575,7 +576,14 @@ function addLogEntry(sides,result,name) {
 function scheduleFlip() {
   setTimeout(()=>{
     const all=[...S.players,...S.npcs];
-    if(all.length){ const obj=all[Math.floor(Math.random()*all.length)]; obj.flipped=!obj.flipped; if(S.combatMode) renderCombatArena(); else { renderUpperZone(); renderLowerZone(); } }
+    if(all.length){
+      const obj=all[Math.floor(Math.random()*all.length)];
+      obj.flipped=!obj.flipped;
+      // Update only this avatar's DOM element — no zone re-render
+      document.querySelectorAll(`[data-av-id="${obj.id}"]`).forEach(f=>{
+        f.classList.toggle('flipped', obj.flipped);
+      });
+    }
     scheduleFlip();
   }, 6000+Math.random()*6000);
 }
