@@ -178,15 +178,41 @@ body.panel-open #toolbar { right:294px; }
 #handout-close:hover { background:rgba(139,0,0,.6); }
 
 /* ── DICE ROW ── */
-#dice-row { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:15; display:flex; gap:4px; }
+#dice-row { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:15; display:flex; gap:4px; align-items:center; }
 .die-btn { background:none; border:none; cursor:pointer; padding:2px; border-radius:4px; display:flex; align-items:center; justify-content:center; transition:transform .15s,filter .15s; }
 .die-btn:hover  { transform:scale(1.18); filter:drop-shadow(0 0 5px rgba(200,169,110,.6)); }
 .die-btn:active { transform:scale(.92); }
-.die-btn svg { width:44px; height:44px; display:block; }
+.die-btn svg { width:44px; height:44px; display:block; transform-origin:50% 50%; }
+.die-btn.rolling svg { animation:die-spin .45s cubic-bezier(.3,.8,.4,1); }
+@keyframes die-spin {
+  0%   { transform:rotate(0deg)   scale(1);    }
+  40%  { transform:rotate(220deg) scale(1.15); }
+  100% { transform:rotate(360deg) scale(1);    }
+}
 .die-poly      { fill:var(--dice-fill); stroke:var(--dice-stroke); stroke-width:2.5; }
 .die-poly-rect { fill:var(--dice-fill); stroke:var(--dice-stroke); stroke-width:2.5; }
 .die-inner-line{ stroke:var(--dice-stroke); stroke-width:1.2; fill:none; opacity:.45; }
 .die-label     { fill:var(--dice-stroke); font-family:'Cinzel',serif; font-size:12px; font-weight:600; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+
+/* Palette toggle button — sits right of dice row */
+#dice-palette-btn {
+  width:18px; height:18px; border-radius:3px; cursor:pointer; flex-shrink:0;
+  border:2px solid rgba(0,0,0,.5); margin-left:8px;
+  transition:transform .15s, box-shadow .15s;
+}
+#dice-palette-btn:hover { transform:scale(1.25); box-shadow:0 0 6px rgba(255,255,255,.3); }
+/* Palette popup — floats above toggle */
+#dice-palette-popup {
+  position:fixed; z-index:16;
+  display:none; flex-direction:row; gap:6px; align-items:center;
+  background:var(--panel-bg); border:1px solid var(--border);
+  border-radius:6px; padding:7px 10px;
+  bottom:80px;
+}
+#dice-palette-popup.open { display:flex; }
+.dswatch { width:16px; height:16px; border-radius:3px; cursor:pointer; border:2px solid rgba(0,0,0,.4); transition:transform .15s,border-color .15s; flex-shrink:0; }
+.dswatch:hover  { transform:scale(1.3); }
+.dswatch.active { border-color:#fff; }
 
 /* ── DICE LOG ── */
 #dice-log { position:fixed; bottom:80px; right:16px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:160px; }
@@ -195,19 +221,31 @@ body.panel-open #dice-log { right:296px; }
 .log-entry.old { color:var(--gold-dim); font-size:10px; }
 @keyframes log-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
-/* ── DICE SWATCHES ── */
-#dice-swatches {
-  position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
-  z-index:15; display:flex; gap:5px; align-items:center;
+/* ── BLOOD LAYER ── */
+#blood-layer { position:absolute; inset:0; z-index:8; pointer-events:none; }
+.blood-spot {
+  position:absolute; border-radius:50% 40% 60% 35%;
+  background:radial-gradient(ellipse at 35% 35%, #cc1111, #5a0000);
+  opacity:0; animation:blood-appear .4s ease forwards;
 }
-.dswatch {
-  width:12px; height:12px; border-radius:50%; cursor:pointer;
-  border:2px solid rgba(0,0,0,0.4);
-  transition:transform .15s, border-color .15s;
-  flex-shrink:0;
+@keyframes blood-appear { from{opacity:0;transform:scale(.3)} to{opacity:.88} }
+
+/* ── CONTEXT MENU ── */
+#ctx-menu {
+  position:fixed; z-index:80; min-width:120px;
+  background:rgba(8,4,2,.96); border:1px solid var(--border);
+  border-radius:5px; padding:4px 0; display:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.7);
+  font-family:'Cinzel',serif; font-size:11px;
 }
-.dswatch:hover  { transform:scale(1.3); }
-.dswatch.active { border-color:#fff; transform:scale(1.2); }
+#ctx-menu.open { display:block; }
+.ctx-item {
+  padding:6px 14px; cursor:pointer; color:var(--text);
+  letter-spacing:.06em; text-transform:uppercase; font-size:10px;
+  transition:background .12s, color .12s;
+}
+.ctx-item:hover { background:rgba(139,0,0,.4); color:#ff9090; }
+
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
 /* ── PEER STATUS ── */
@@ -231,10 +269,10 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 
 <!-- SCENE SHELL -->
 <div id="scene">
-  <!-- FIXED 1800×1300 CANVAS (scaled to fit viewport) -->
   <div id="canvas">
     <div id="backdrop"><div id="backdrop-vignette"></div></div>
     <div id="combat-overlay"></div>
+    <div id="blood-layer"></div>
     <div id="dm-avatar-wrap">
       <div id="dm-av-frame" title="Upload DM Avatar"><div class="av-placeholder">👁</div></div>
       <span id="dm-label">DM</span>
@@ -243,6 +281,11 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
     <div id="lower-zone"></div>
     <div id="combat-arena"></div>
   </div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-kill">⚔ Kill</div>
 </div>
 
 <!-- TRANSITION OVERLAY -->
@@ -265,8 +308,9 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
   <button class="die-btn" data-sides="12"  title="d12"> <svg viewBox="0 0 60 60"><polygon points="30,4 50,14 57,36 42,54 18,54 3,36 10,14" class="die-poly"/><text x="30" y="35" class="die-label">d12</text></svg></button>
   <button class="die-btn" data-sides="20"  title="d20"> <svg viewBox="0 0 60 60"><polygon points="30,4 54,17 54,43 30,56 6,43 6,17" class="die-poly"/><line x1="6" y1="17" x2="54" y2="17" class="die-inner-line"/><line x1="6" y1="43" x2="54" y2="43" class="die-inner-line"/><text x="30" y="35" class="die-label">d20</text></svg></button>
   <button class="die-btn" data-sides="100" title="d100"><svg viewBox="0 0 60 60"><polygon points="30,4 52,20 46,52 14,52 8,20"    class="die-poly"/><text x="30" y="35" class="die-label" style="font-size:9px">d100</text></svg></button>
+  <div id="dice-palette-btn" title="Dice Colour"></div>
 </div>
-<div id="dice-swatches"></div>
+<div id="dice-palette-popup"></div>
 <div id="dice-log"></div>
 
 <!-- TOOLBAR -->
@@ -461,7 +505,10 @@ function handleMsg(msg,fromConn) {
       if(isHost) broadcast(msg,fromConn);
       break;
     }
-    case 'show_handout':    showHandout(msg.url); if(isHost) broadcast(msg,fromConn); break;
+    case 'blood_splat':
+      if(window.spawnBloodAt) window.spawnBloodAt(msg.cx,msg.cy);
+      if(isHost) broadcast(msg,fromConn);
+      break;
     case 'dismiss_handout': dismissHandout(); if(isHost) broadcast(msg,fromConn); break;
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
     case 'dice_roll':       addLogEntry(msg.sides,msg.result,msg.name); if(isHost) broadcast(msg,fromConn); break;
@@ -484,7 +531,7 @@ function makeAvatarEl(obj,removeType) {
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
   const lbl=document.createElement('div'); lbl.className='av-label'; lbl.textContent=obj.name||'';
   wrap.appendChild(frame); wrap.appendChild(lbl);
-  if(isHost) frame.addEventListener('contextmenu',e=>{ e.preventDefault(); if(confirm(`Remove "${obj.name}"?`)) send({type:removeType,id:obj.id}); });
+  if(isHost) frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e, removeType==='remove_player'?'player':'npc', obj.id, frame));
   return wrap;
 }
 function renderUpperZone() { const z=el('upper-zone'); z.innerHTML=''; S.npcs.forEach(n=>z.appendChild(makeAvatarEl(n,'remove_npc'))); }
@@ -532,7 +579,7 @@ function makeCombatAv(obj, entityType, idx) {
   wrap.appendChild(frame);
   if(isHost){
     frame.addEventListener('mousedown',e=>{ if(e.button!==0) return; e.preventDefault(); combatDragStart(e,wrap,entityType,obj); });
-    frame.addEventListener('contextmenu',e=>{ e.preventDefault(); if(confirm(`Remove "${obj.name}"?`)) send({type:entityType==='player'?'remove_player':'remove_npc',id:obj.id}); });
+    frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
   }
   return wrap;
 }
@@ -544,22 +591,22 @@ function renderCombatArena() {
 
 function applyCombat() {
   el('btn-combat').classList.toggle('active', S.combatMode);
+  if(window._clearBlood) window._clearBlood();
 
   const ov = el('transition-overlay');
   ov.style.display = 'block';
-  ov.style.transition = 'opacity 0.65s ease';
+  ov.style.transition = 'opacity 1s ease';
   requestAnimationFrame(()=>requestAnimationFrame(()=>{ ov.style.opacity = '1'; }));
 
   setTimeout(()=>{
-    // 1 second after click: toggle layout under cover of darkness
+    // Exactly when dim completes: swap layout, avatars run in
     document.body.classList.toggle('combat', S.combatMode);
     if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 
-    // Fade back out — avatars animate in as screen brightens
     ov.style.transition = 'opacity 0.7s ease';
     ov.style.opacity = '0';
     setTimeout(()=>{ ov.style.display='none'; }, 700);
-  }, 1500);
+  }, 1000);
 }
 
 // ── COMBAT DRAG (uses canvas coordinate space) ───────────────────
@@ -711,21 +758,102 @@ function scheduleFlip() {
     { label:'Iron',   fill:'#4a4a55', stroke:'#d0d0e0' },
     { label:'Jade',   fill:'#1a4a2e', stroke:'#90ffb8'  },
   ];
+  let activePalette = DICE_PALETTES[0];
   function applyDicePalette(p) {
+    activePalette = p;
     document.documentElement.style.setProperty('--dice-fill',   p.fill);
     document.documentElement.style.setProperty('--dice-stroke', p.stroke);
+    el('dice-palette-btn').style.background = p.fill;
+    el('dice-palette-btn').style.borderColor = p.stroke;
     document.querySelectorAll('.dswatch').forEach(s=>s.classList.toggle('active', s.dataset.palette===p.label));
   }
-  const swatchWrap = el('dice-swatches');
+  // Build palette popup
   DICE_PALETTES.forEach(p=>{
     const s=document.createElement('div');
     s.className='dswatch'; s.dataset.palette=p.label; s.title=p.label;
     s.style.background=p.fill; s.style.borderColor=p.stroke;
-    s.addEventListener('click',()=>applyDicePalette(p));
-    swatchWrap.appendChild(s);
+    s.addEventListener('click',()=>{ applyDicePalette(p); el('dice-palette-popup').classList.remove('open'); });
+    el('dice-palette-popup').appendChild(s);
   });
   applyDicePalette(DICE_PALETTES[0]);
-  document.querySelectorAll('.die-btn').forEach(btn=>btn.addEventListener('click',()=>{ if(!isHost&&!hostConn?.open) return; rollDie(parseInt(btn.dataset.sides)); }));
+  // Position popup above toggle btn on open
+  el('dice-palette-btn').addEventListener('click', e=>{
+    const popup=el('dice-palette-popup');
+    popup.classList.toggle('open');
+    if(popup.classList.contains('open')){
+      const btnR=e.currentTarget.getBoundingClientRect();
+      popup.style.left = (btnR.left + btnR.width/2 - popup.offsetWidth/2)+'px';
+    }
+    e.stopPropagation();
+  });
+  document.addEventListener('click', ()=>el('dice-palette-popup').classList.remove('open'));
+
+  // Dice spin + roll
+  document.querySelectorAll('.die-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    if(!isHost&&!hostConn?.open) return;
+    btn.classList.remove('rolling');
+    void btn.offsetWidth;
+    btn.classList.add('rolling');
+    btn.addEventListener('animationend',()=>btn.classList.remove('rolling'),{once:true});
+    rollDie(parseInt(btn.dataset.sides));
+  }));
+
+  // ── BLOOD & KILL ──────────────────────────────────────────────
+  let ctxTarget = null; // {entityType, id, domEl}
+
+  function spawnBlood(cx, cy) {
+    const layer = el('blood-layer');
+    const count = 5 + Math.floor(Math.random()*5);
+    for(let i=0; i<count; i++){
+      const spot = document.createElement('div');
+      spot.className = 'blood-spot';
+      const w = 18 + Math.random()*40;
+      const h = w * (0.45 + Math.random()*0.55);
+      const angle = Math.random()*Math.PI*2;
+      const dist  = Math.random()*90;
+      spot.style.width  = w+'px';
+      spot.style.height = h+'px';
+      spot.style.left   = (cx + Math.cos(angle)*dist - w/2)+'px';
+      spot.style.top    = (cy + Math.sin(angle)*dist - h/2)+'px';
+      spot.style.transform = `rotate(${Math.random()*360}deg)`;
+      spot.style.animationDelay = (i*0.04)+'s';
+      layer.appendChild(spot);
+    }
+  }
+
+  function clearBlood() { el('blood-layer').innerHTML=''; }
+
+  function killAvatar(entityType, id, domEl) {
+    // Get canvas-space centre of this avatar
+    const r = domEl.getBoundingClientRect();
+    const cr = el('canvas').getBoundingClientRect();
+    const cx = (r.left + r.width/2  - cr.left) / scale;
+    const cy = (r.top  + r.height/2 - cr.top)  / scale;
+    send({ type: entityType==='player' ? 'remove_player' : 'remove_npc', id });
+    send({ type: 'blood_splat', cx, cy });
+  }
+
+  // Context menu wiring — attached to the document, shown by any avatar frame
+  function showCtxMenu(e, entityType, id, domEl) {
+    if(!isHost) return;
+    e.preventDefault(); e.stopPropagation();
+    ctxTarget = { entityType, id, domEl };
+    const menu = el('ctx-menu');
+    menu.style.left = e.clientX+'px';
+    menu.style.top  = e.clientY+'px';
+    menu.classList.add('open');
+  }
+  document.addEventListener('click', ()=>el('ctx-menu').classList.remove('open'));
+  el('ctx-kill').addEventListener('click', ()=>{
+    if(!ctxTarget) return;
+    killAvatar(ctxTarget.entityType, ctxTarget.id, ctxTarget.domEl);
+    ctxTarget = null;
+  });
+
+  // Expose globally so message handler + applyCombat can call them
+  window.spawnBloodAt = spawnBlood;
+  window._clearBlood  = clearBlood;
+  window._showCtxMenu = showCtxMenu;
 
   // Save / Load
   el('tp-save').addEventListener('click',()=>{
