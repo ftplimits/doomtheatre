@@ -599,13 +599,16 @@ function applyCombat() {
   requestAnimationFrame(()=>requestAnimationFrame(()=>{ ov.style.opacity = '1'; }));
 
   setTimeout(()=>{
-    // Exactly when dim completes: swap layout, avatars run in
+    // Dim complete — swap layout but hold black
     document.body.classList.toggle('combat', S.combatMode);
-    if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 
-    ov.style.transition = 'opacity 0.7s ease';
-    ov.style.opacity = '0';
-    setTimeout(()=>{ ov.style.display='none'; }, 700);
+    // 1 more second, then avatars run in and screen brightens
+    setTimeout(()=>{
+      if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
+      ov.style.transition = 'opacity 0.7s ease';
+      ov.style.opacity = '0';
+      setTimeout(()=>{ ov.style.display='none'; }, 700);
+    }, 1000);
   }, 1000);
 }
 
