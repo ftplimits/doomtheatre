@@ -246,6 +246,7 @@ body.panel-open #dice-log { right:296px; }
 }
 .ctx-item:hover { background:rgba(139,0,0,.4); color:#ff9090; }
 
+.ca-frame.flipped .ca-name-bar { transform: scaleX(-1); }
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
 /* ── PEER STATUS ── */
@@ -593,7 +594,9 @@ function applyCombat() {
   el('btn-combat').classList.toggle('active', S.combatMode);
   if(window._clearBlood) window._clearBlood();
 
-  // Step 1 — instantly hide normal zones (avatars vanish)
+  // Step 1 — clear arena BEFORE making it visible so no stale elements animate
+  el('combat-arena').innerHTML = '';
+  // Instantly hide normal zones (avatars vanish)
   document.body.classList.toggle('combat', S.combatMode);
 
   const ov = el('transition-overlay');
