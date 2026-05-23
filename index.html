@@ -593,23 +593,36 @@ function applyCombat() {
   el('btn-combat').classList.toggle('active', S.combatMode);
   if(window._clearBlood) window._clearBlood();
 
+  // Step 1 — instantly hide normal zones (avatars vanish)
+  document.body.classList.toggle('combat', S.combatMode);
+
   const ov = el('transition-overlay');
-  ov.style.display = 'block';
-  ov.style.transition = 'opacity 1s ease';
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{ ov.style.opacity = '1'; }));
 
-  setTimeout(()=>{
-    // Dim complete — swap layout but hold black
-    document.body.classList.toggle('combat', S.combatMode);
+  // Step 2 — dim to 50% over exactly 1s
+  // Reset first so repeated toggles don't inherit old transition
+  ov.style.transition = 'none';
+  ov.style.opacity    = '0';
+  ov.style.display    = 'block';
 
-    // 1 more second, then avatars run in and screen brightens
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    ov.style.transition = 'opacity 1s linear';
+    ov.style.opacity    = '0.75';  // 50% dark + some extra for readability
+  }));
+
+  // Step 3 — when the dim is ACTUALLY done (not a timer guess), wait 0.5s then run avatars in
+  ov.addEventListener('transitionend', function onDimDone() {
+    ov.removeEventListener('transitionend', onDimDone);
+
     setTimeout(()=>{
+      // Render arena — avatars animate in with ca-from-left/right
       if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
-      ov.style.transition = 'opacity 0.7s ease';
-      ov.style.opacity = '0';
-      setTimeout(()=>{ ov.style.display='none'; }, 700);
-    }, 1000);
-  }, 1000);
+
+      // Fade the dim back out as they run in
+      ov.style.transition = 'opacity 0.6s ease';
+      ov.style.opacity    = '0';
+      ov.addEventListener('transitionend', ()=>{ ov.style.display='none'; }, {once:true});
+    }, 500);
+  }, {once:true});
 }
 
 // ── COMBAT DRAG (uses canvas coordinate space) ───────────────────
