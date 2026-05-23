@@ -49,7 +49,7 @@ html, body { width:100vw; height:100vh; overflow:hidden; background:#111; font-f
 #combat-overlay {
   position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity .5s ease;
   background-color:rgba(0,0,0,.5);
-  background-image:linear-gradient(rgba(255,255,255,.12) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,.12) 1px,transparent 1px);
+  background-image:linear-gradient(rgba(255,255,255,1) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px);
   background-size:100px 100px;
 }
 body.combat #combat-overlay { opacity:1; }
@@ -617,7 +617,7 @@ function enterCombat() {
 
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     ov.style.transition = 'opacity 1s linear';
-    ov.style.opacity    = '0.75';
+    ov.style.opacity    = '0.6';
   }));
 
   ov.addEventListener('transitionend', function onDimDone() {
@@ -633,14 +633,12 @@ function enterCombat() {
 }
 
 function exitCombat() {
-  // Combat avatars vanish immediately
+  // Combat avatars vanish immediately, but keep body.combat ON so zones stay hidden during un-dim
   el('combat-arena').innerHTML = '';
-  document.body.classList.remove('combat');
 
-  // Start overlay dark, un-dim over 1s
   const ov = el('transition-overlay');
   ov.style.transition = 'none';
-  ov.style.opacity    = '0.75';
+  ov.style.opacity    = '0.6';
   ov.style.display    = 'block';
 
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
@@ -648,10 +646,11 @@ function exitCombat() {
     ov.style.opacity    = '0';
   }));
 
-  // When un-dim finishes, re-render zones so slide-in animations play
+  // Only when un-dim is fully done: remove combat class and render zones (one animation pass)
   ov.addEventListener('transitionend', function onUndimDone() {
     ov.removeEventListener('transitionend', onUndimDone);
     ov.style.display = 'none';
+    document.body.classList.remove('combat');
     renderUpperZone();
     renderLowerZone();
   }, {once:true});
