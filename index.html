@@ -258,7 +258,22 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 #peer-status.error     { color:#a55; }
 
 /* ── TEST PANEL ── */
-#test-panel { position:fixed; left:0; top:0; bottom:0; width:190px; background:rgba(2,6,14,.93); border-right:1px solid rgba(30,60,100,.5); z-index:55; padding:12px; display:none; flex-direction:column; gap:7px; font-family:'Courier New',monospace; font-size:11px; color:#5a8aaa; }
+#test-panel {
+  position:fixed; left:0; top:0; bottom:0; width:190px;
+  background:rgba(2,6,14,.93); border-right:1px solid rgba(30,60,100,.5);
+  z-index:55; padding:12px; display:none; flex-direction:column; gap:7px;
+  font-family:'Courier New',monospace; font-size:11px; color:#5a8aaa;
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+}
+#test-panel.collapsed { transform:translateX(-190px); }
+#tp-toggle {
+  position:absolute; top:50%; right:-22px; transform:translateY(-50%);
+  width:22px; height:56px; background:rgba(2,6,14,.93);
+  border:1px solid rgba(30,60,100,.5); border-left:none;
+  border-radius:0 5px 5px 0; color:#7aade0; cursor:pointer; font-size:12px;
+  display:flex; align-items:center; justify-content:center;
+}
+#tp-toggle:hover { background:rgba(10,30,60,.9); }
 #test-panel h2 { font-family:'Cinzel',serif; font-size:10px; letter-spacing:.15em; color:#7aade0; text-transform:uppercase; border-bottom:1px solid rgba(30,60,100,.5); padding-bottom:6px; }
 #test-panel label { font-size:9px; color:#3a6a8a; text-transform:uppercase; letter-spacing:.08em; }
 .tp-input { width:100%; background:rgba(0,8,20,.8); border:1px solid rgba(30,60,100,.6); border-radius:3px; color:#8ab8d8; padding:4px 6px; font-family:'Courier New',monospace; font-size:10px; outline:none; }
@@ -267,6 +282,27 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 #tp-status { font-size:9px; color:#2a5a7a; word-break:break-all; line-height:1.4; min-height:28px; }
 #tp-code   { font-size:10px; color:#4a9ac0; word-break:break-all; }
 .tp-divider { border:none; border-top:1px solid rgba(30,60,100,.4); margin:2px 0; }
+body.browser-mode #dm-avatar-wrap { left:206px; }
+body.browser-mode #upper-zone, body.browser-mode #lower-zone { padding-left:306px; }
+body.browser-mode #dice-row { left:calc(50% + 95px); }
+body.browser-mode.tp-collapsed #dm-avatar-wrap { left:16px; }
+body.browser-mode.tp-collapsed #upper-zone,
+body.browser-mode.tp-collapsed #lower-zone { padding-left:140px; }
+body.browser-mode.tp-collapsed #dice-row   { left:50%; }
+
+/* ── DICE ROLL POPUP ── */
+#dice-popup {
+  position:fixed; top:32px; left:50%; transform:translateX(-50%);
+  z-index:65; pointer-events:none; text-align:center;
+  background:rgba(6,3,1,.9); border:1px solid var(--gold-dim);
+  border-radius:10px; padding:10px 32px;
+  opacity:0; transition:opacity .25s ease;
+  box-shadow:0 4px 24px rgba(0,0,0,.8);
+}
+#dice-popup.visible { opacity:1; }
+#dice-popup .pop-die    { font-family:'Cinzel',serif; font-size:10px; letter-spacing:.2em; color:var(--text-dim); text-transform:uppercase; }
+#dice-popup .pop-result { font-family:'Cinzel',serif; font-size:52px; font-weight:900; color:var(--gold); line-height:1; }
+#dice-popup .pop-name   { font-family:'Cinzel',serif; font-size:9px; letter-spacing:.12em; color:var(--text-dim); margin-top:2px; }
 </style>
 </head>
 <body>
@@ -348,8 +384,12 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 
 <input type="file" id="tp-load-file" accept=".json" style="display:none">
 
+<!-- DICE ROLL POPUP -->
+<div id="dice-popup"><div class="pop-die"></div><div class="pop-result"></div><div class="pop-name"></div></div>
+
 <!-- TEST PANEL -->
 <div id="test-panel">
+  <button id="tp-toggle" title="Toggle Panel">◀</button>
   <h2>DooM Theatre</h2>
   <div id="tp-status">Disconnected</div>
   <label>DM Avatar</label>
@@ -505,7 +545,9 @@ function handleMsg(msg,fromConn) {
       const arr=msg.entityType==='player'?S.players:S.npcs;
       const obj=arr.find(o=>o.id===msg.id);
       if(obj){ obj.cx=msg.cx; obj.cy=msg.cy; }
-      if(S.combatMode) renderCombatArena();
+      // Move just this token in the DOM — no full re-render, no animation replay
+      const frame=document.querySelector(`[data-av-id="${msg.id}"]`);
+      if(frame){ const wrap=frame.closest('.ca-wrap'); if(wrap){ wrap.style.left=msg.cx+'px'; wrap.style.top=msg.cy+'px'; } }
       if(isHost) broadcast(msg,fromConn);
       break;
     }
@@ -721,14 +763,25 @@ function applyNpc(item)      { send({type:'add_npc',    npc:  {id:uid(),name:ite
 
 // ── DICE ─────────────────────────────────────────────────────────
 const diceLog=[], LOG_MAX=10;
+let popTimer=null;
+function showDicePopup(sides,result,name) {
+  const p=el('dice-popup');
+  p.querySelector('.pop-die').textContent='d'+sides;
+  p.querySelector('.pop-result').textContent=result;
+  p.querySelector('.pop-name').textContent=name||'';
+  p.classList.add('visible');
+  clearTimeout(popTimer);
+  popTimer=setTimeout(()=>p.classList.remove('visible'), 2000);
+}
 function rollDie(sides) {
   const result=sides===100?(Math.floor(Math.random()*10)*10+Math.floor(Math.random()*10))||100:Math.floor(Math.random()*sides)+1;
-  send({type:'dice_roll',sides,result,name:'DM'});
+  send({type:'dice_roll',sides,result,name:S.dmName||'DM'});
 }
 function addLogEntry(sides,result,name) {
   diceLog.unshift({sides,result,name}); if(diceLog.length>LOG_MAX) diceLog.pop();
   const log=el('dice-log'); log.innerHTML='';
   diceLog.forEach((e,i)=>{ const d=document.createElement('div'); d.className='log-entry'+(i?' old':''); d.textContent=`${e.name}: d${e.sides} → ${e.result}`; log.appendChild(d); });
+  showDicePopup(sides,result,name);
 }
 
 // ── RANDOM FLIP ───────────────────────────────────────────────────
@@ -757,6 +810,13 @@ function scheduleFlip() {
   } else {
     document.body.classList.add('browser-mode');
     el('test-panel').style.display='flex';
+
+    // Test panel collapse toggle
+    el('tp-toggle').addEventListener('click',()=>{
+      const collapsed=el('test-panel').classList.toggle('collapsed');
+      document.body.classList.toggle('tp-collapsed', collapsed);
+      el('tp-toggle').textContent = collapsed ? '▶' : '◀';
+    });
 
     let pendingHostAvatar=null, pendingHostName=null;
     el('tp-av-wrap').addEventListener('click',()=>el('tp-av-file').click());
