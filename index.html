@@ -80,9 +80,13 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 #upper-zone .av-wrap { animation:av-enter-top    .5s cubic-bezier(.34,1.3,.64,1) both; flex-direction:column-reverse; padding-bottom:4px; }
 
 /* ── DM AVATAR (inside canvas, absolute) ── */
-#dm-avatar-wrap { position:absolute; top:16px; left:16px; z-index:20; display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:all; }
+@keyframes dm-float {
+  0%,100% { transform:translateY(0px); }
+  50%      { transform:translateY(-14px); }
+}
+#dm-avatar-wrap { position:absolute; top:16px; left:16px; z-index:20; display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:all; animation:dm-float 4s ease-in-out infinite; }
 #dm-av-frame.flipped { transform:scaleX(-1); }
-#dm-av-frame { width:144px; height:144px; border-radius:50%; overflow:hidden; background:rgba(20,12,4,.85); border:2px solid var(--blood); box-shadow:0 0 16px rgba(139,0,0,.4),inset 0 0 8px rgba(0,0,0,.5); cursor:pointer; position:relative; transition:box-shadow .25s; }
+#dm-av-frame { width:200px; height:200px; border-radius:50%; overflow:hidden; background:rgba(20,12,4,.85); border:2px solid var(--blood); box-shadow:0 0 16px rgba(139,0,0,.4),inset 0 0 8px rgba(0,0,0,.5); cursor:pointer; position:relative; transition:box-shadow .25s; }
 #dm-av-frame:hover { box-shadow:0 0 24px rgba(139,0,0,.7),inset 0 0 8px rgba(0,0,0,.5); }
 #dm-av-frame img { width:100%; height:100%; object-fit:cover; }
 #dm-av-frame .av-placeholder { font-size:36px; }
@@ -293,13 +297,16 @@ body.browser-mode.tp-collapsed #dice-row   { left:50%; }
 
 /* ── DICE ROLL POPUP ── */
 #dice-popup {
-  position:fixed; top:32px; left:50%; transform:translateX(-50%);
+  position:fixed; left:50%;
   z-index:65; pointer-events:none; text-align:center;
   background:rgba(6,3,1,.9); border:1px solid var(--gold-dim);
   border-radius:10px; padding:10px 32px;
-  opacity:0; transition:opacity .25s ease;
+  opacity:0;
+  top:50%; transform:translate(-50%,-50%);
+  transition:opacity .25s ease;
   box-shadow:0 4px 24px rgba(0,0,0,.8);
 }
+body.combat #dice-popup { top:32px; transform:translateX(-50%); }
 #dice-popup.visible { opacity:1; }
 #dice-popup .pop-die    { font-family:'Cinzel',serif; font-size:10px; letter-spacing:.2em; color:var(--text-dim); text-transform:uppercase; }
 #dice-popup .pop-result { font-family:'Cinzel',serif; font-size:52px; font-weight:900; color:var(--gold); line-height:1; }
