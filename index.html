@@ -61,7 +61,7 @@ body.combat #combat-overlay { opacity:1; }
   gap:14px; padding:0 140px; pointer-events:none;
 }
 #upper-zone { top:0; height:34%; align-items:flex-start; padding-top:14px; }
-#lower-zone { bottom:0; height:34%; padding-bottom:80px; }
+#lower-zone { bottom:0; height:34%; padding-bottom:170px; }
 body.combat #upper-zone, body.combat #lower-zone { display:none; }
 
 /* ── NORMAL AVATAR FRAME ── */
@@ -81,6 +81,7 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 
 /* ── DM AVATAR (inside canvas, absolute) ── */
 #dm-avatar-wrap { position:absolute; top:16px; left:16px; z-index:20; display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:all; }
+#dm-av-frame.flipped { transform:scaleX(-1); }
 #dm-av-frame { width:144px; height:144px; border-radius:50%; overflow:hidden; background:rgba(20,12,4,.85); border:2px solid var(--blood); box-shadow:0 0 16px rgba(139,0,0,.4),inset 0 0 8px rgba(0,0,0,.5); cursor:pointer; position:relative; transition:box-shadow .25s; }
 #dm-av-frame:hover { box-shadow:0 0 24px rgba(139,0,0,.7),inset 0 0 8px rgba(0,0,0,.5); }
 #dm-av-frame img { width:100%; height:100%; object-fit:cover; }
@@ -185,7 +186,7 @@ body.panel-open #toolbar { right:294px; }
 .die-btn { background:none; border:none; cursor:pointer; padding:2px; border-radius:4px; display:flex; align-items:center; justify-content:center; transition:transform .15s,filter .15s; }
 .die-btn:hover  { transform:scale(1.18); filter:drop-shadow(0 0 5px rgba(200,169,110,.6)); }
 .die-btn:active { transform:scale(.92); }
-.die-btn svg { width:44px; height:44px; display:block; transform-origin:50% 50%; }
+.die-btn svg { width:55px; height:55px; display:block; transform-origin:50% 50%; }
 .die-btn.rolling svg { animation:die-spin .45s cubic-bezier(.3,.8,.4,1); }
 @keyframes die-spin {
   0%   { transform:rotate(0deg)   scale(1);    }
@@ -426,7 +427,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 
 // ── STATE ────────────────────────────────────────────────────────
 let S = {
-  backdrop:null, dmAvatar:null, dmName:null,
+  backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
   combatMode:false,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
@@ -551,7 +552,17 @@ function handleMsg(msg,fromConn) {
       if(isHost) broadcast(msg,fromConn);
       break;
     }
-    case 'blood_splat':
+    case 'flip_avatar': {
+      if(msg.id==='__dm__') {
+        S.dmFlipped=msg.flipped;
+        el('dm-av-frame').classList.toggle('flipped', S.dmFlipped);
+      } else {
+        const obj=[...S.players,...S.npcs].find(o=>o.id===msg.id);
+        if(obj){ obj.flipped=msg.flipped; document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(f=>f.classList.toggle('flipped',obj.flipped)); }
+      }
+      if(isHost) broadcast(msg,fromConn);
+      break;
+    }
       if(window.spawnBloodAt) window.spawnBloodAt(msg.cx,msg.cy);
       if(isHost) broadcast(msg,fromConn);
       break;
@@ -566,6 +577,7 @@ function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); re
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
+  el('dm-av-frame').classList.toggle('flipped', !!S.dmFlipped);
   el('dm-label').textContent=S.dmName||'DM';
 }
 
@@ -577,7 +589,10 @@ function makeAvatarEl(obj,removeType) {
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
   const lbl=document.createElement('div'); lbl.className='av-label'; lbl.textContent=obj.name||'';
   wrap.appendChild(frame); wrap.appendChild(lbl);
-  if(isHost) frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e, removeType==='remove_player'?'player':'npc', obj.id, frame));
+  if(isHost) {
+    frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e, removeType==='remove_player'?'player':'npc', obj.id, frame));
+    frame.addEventListener('dblclick',e=>{ e.preventDefault(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
+  }
   return wrap;
 }
 function renderUpperZone() {
@@ -632,6 +647,7 @@ function makeCombatAv(obj, entityType, idx) {
   if(isHost){
     frame.addEventListener('mousedown',e=>{ if(e.button!==0) return; e.preventDefault(); combatDragStart(e,wrap,entityType,obj); });
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
+    frame.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
   }
   return wrap;
 }
@@ -787,14 +803,14 @@ function addLogEntry(sides,result,name) {
 // ── RANDOM FLIP ───────────────────────────────────────────────────
 function scheduleFlip() {
   setTimeout(()=>{
-    const all=[...S.players,...S.npcs];
-    if(all.length){
-      const obj=all[Math.floor(Math.random()*all.length)];
-      obj.flipped=!obj.flipped;
-      // Update only this avatar's DOM element — no zone re-render
-      document.querySelectorAll(`[data-av-id="${obj.id}"]`).forEach(f=>{
-        f.classList.toggle('flipped', obj.flipped);
-      });
+    if(!S.combatMode) {
+      // Pool: all players + npcs + DM avatar (represented by sentinel)
+      const pool=[...S.players,...S.npcs,{id:'__dm__',flipped:S.dmFlipped}];
+      if(pool.length){
+        const obj=pool[Math.floor(Math.random()*pool.length)];
+        const newFlip=!obj.flipped;
+        send({type:'flip_avatar', id:obj.id, flipped:newFlip});
+      }
     }
     scheduleFlip();
   }, 6000+Math.random()*6000);
@@ -834,8 +850,18 @@ function scheduleFlip() {
   el('btn-combat').addEventListener('click',()=>{ if(isHost) send({type:'set_combat',active:!S.combatMode}); });
   el('btn-handout').addEventListener('click',()=>{ el('upload-handouts').click(); });
 
-  // DM Avatar — single click → file picker
-  el('dm-av-frame').addEventListener('click', ()=>{ if(isHost) el('upload-dm-avatar').click(); });
+  // DM Avatar — single click → upload, double click → flip
+  let dmClickTimer=null;
+  el('dm-av-frame').addEventListener('click',()=>{
+    if(!isHost) return;
+    if(dmClickTimer){ clearTimeout(dmClickTimer); dmClickTimer=null; return; } // second click of double — let dblclick handle it
+    dmClickTimer=setTimeout(()=>{ dmClickTimer=null; el('upload-dm-avatar').click(); }, 250);
+  });
+  el('dm-av-frame').addEventListener('dblclick',()=>{
+    if(!isHost) return;
+    clearTimeout(dmClickTimer); dmClickTimer=null;
+    send({type:'flip_avatar', id:'__dm__', flipped:!S.dmFlipped});
+  });
   el('upload-dm-avatar').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
     const url=await toWebP(f);
