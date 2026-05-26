@@ -395,21 +395,24 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
 #dice-popup.visible { opacity:1; }
 #dice-popup .pop-die    { font-family:'Cinzel',serif; font-size:10px; letter-spacing:.2em; color:var(--text-dim); text-transform:uppercase; }
 #dice-popup .pop-result { font-family:'Cinzel',serif; font-size:52px; font-weight:900; color:var(--gold); line-height:1; }
-/* ── BOTTOM BAR (wraps AoE toolbar + dice row) ── */
+/* ── BOTTOM BAR (wraps dice row only) ── */
 #bottom-bar {
   position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
-  z-index:15; display:flex; align-items:center; gap:14px;
+  z-index:15; display:flex; align-items:center;
 }
 body.browser-mode #bottom-bar { left:calc(50% + 95px); }
 body.browser-mode.tp-collapsed #bottom-bar { left:50%; }
 
-/* ── AOE TOOLBAR ── */
+/* ── AOE TOOLBAR — centred in left portion of screen ── */
 #aoe-toolbar {
+  position:fixed; bottom:28px;
+  right:calc(50% + 260px);
   display:none; align-items:center; gap:5px;
   background:var(--panel-bg); border:1px solid var(--border);
   border-radius:8px; padding:5px 8px;
 }
 body.combat #aoe-toolbar { display:flex; }
+body.browser-mode #aoe-toolbar { right:calc(50% + 165px); }
 .aoe-shape-btn {
   width:36px; height:36px; background:none; border:1px solid var(--border);
   border-radius:5px; color:var(--gold-dim); font-size:18px; cursor:pointer;
@@ -520,22 +523,22 @@ body.combat #aoe-layer { display:block; }
 <input type="file" id="tp-av-file"       accept="image/*" style="display:none">
 
 <!-- DICE -->
-<div id="bottom-bar">
-  <!-- AoE shapes toolbar (combat mode only) -->
-  <div id="aoe-toolbar">
-    <button class="aoe-shape-btn" data-shape="circle" title="Circle">◯</button>
-    <button class="aoe-shape-btn" data-shape="cone"   title="Cone">△</button>
-    <button class="aoe-shape-btn" data-shape="line"   title="Line">━</button>
-    <button class="aoe-shape-btn" data-shape="square" title="Square">□</button>
-    <div class="aoe-divider"></div>
-    <div class="aoe-color-btn active" data-acolor="#1a6fff" style="background:#1a6fff" title="Blue"></div>
-    <div class="aoe-color-btn"        data-acolor="#dc1414" style="background:#dc1414" title="Red"></div>
-    <div class="aoe-color-btn"        data-acolor="#14b414" style="background:#14b414" title="Green"></div>
-    <div class="aoe-color-btn"        data-acolor="#c8a96e" style="background:#c8a96e" title="Gold"></div>
-    <div class="aoe-divider"></div>
-    <button id="aoe-clear" title="Clear all shapes">✕</button>
-  </div>
+<!-- AoE shapes toolbar (combat mode only, positioned independently) -->
+<div id="aoe-toolbar">
+  <button class="aoe-shape-btn" data-shape="circle" title="Circle">◯</button>
+  <button class="aoe-shape-btn" data-shape="cone"   title="Cone">△</button>
+  <button class="aoe-shape-btn" data-shape="line"   title="Line">━</button>
+  <button class="aoe-shape-btn" data-shape="square" title="Square">□</button>
+  <div class="aoe-divider"></div>
+  <div class="aoe-color-btn active" data-acolor="#1a6fff" style="background:#1a6fff" title="Blue"></div>
+  <div class="aoe-color-btn"        data-acolor="#dc1414" style="background:#dc1414" title="Red"></div>
+  <div class="aoe-color-btn"        data-acolor="#14b414" style="background:#14b414" title="Green"></div>
+  <div class="aoe-color-btn"        data-acolor="#c8a96e" style="background:#c8a96e" title="Gold"></div>
+  <div class="aoe-divider"></div>
+  <button id="aoe-clear" title="Clear all shapes">✕</button>
+</div>
 
+<div id="bottom-bar">
   <div id="dice-row">
     <button class="die-btn" data-sides="4"   title="d4">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,5 56,52 4,52"              class="die-poly"/><line x1="30" y1="5" x2="30" y2="52" class="die-inner-line"/><text x="30" y="42" class="die-label">d4</text></svg></button>
     <button class="die-btn" data-sides="6"   title="d6">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><rect x="7" y="7" width="46" height="46" rx="6"  class="die-poly-rect"/><text x="30" y="33" class="die-label">d6</text></svg></button>
@@ -1160,21 +1163,32 @@ function aoeShapePath(shape) {
   return null;
 }
 
-function styleAoeEl(e_,color,preview){
+function styleAoeEl(e_,color,preview,shapeType){
   e_.setAttribute('stroke',color); e_.setAttribute('fill',color);
   e_.setAttribute('fill-opacity',preview?'0.06':'0.12');
-  e_.setAttribute('stroke-width',preview?'2':'2.5');
+  // Line tool: stroke width = one grid cell (corridor shape)
+  const sw = shapeType==='line' ? CELL.toString() : (preview?'2':'2.5');
+  e_.setAttribute('stroke-width',sw);
+  e_.setAttribute('stroke-linecap','round');
   if(!preview){ e_.classList.add('aoe-shape'); e_.setAttribute('filter','url(#aoe-glow-filter)'); }
   else e_.classList.add('aoe-preview');
   return e_;
 }
+
+// Snap a coordinate to the nearest cell center or grid intersection
+function snapAoeCoord(v) {
+  const corner = Math.round(v / CELL) * CELL;          // grid intersection
+  const center = Math.floor(v / CELL) * CELL + CELL/2; // cell centre
+  return Math.abs(v - corner) <= Math.abs(v - center) ? corner : center;
+}
+function snapAoeXY(x,y){ return {x:snapAoeCoord(x), y:snapAoeCoord(y)}; }
 
 function renderAoeLayer() {
   const svg=el('aoe-layer'); if(!svg) return;
   [...svg.children].forEach(c=>{ if(c.tagName!=='defs') svg.removeChild(c); });
   S.aoeShapes.forEach(shape=>{
     const path=aoeShapePath(shape); if(!path) return;
-    styleAoeEl(path,shape.color,false);
+    styleAoeEl(path,shape.color,false,shape.type);
     path.dataset.aoeId=shape.id;
     if(isHost){
       path.style.pointerEvents='all';
@@ -1440,24 +1454,23 @@ function scheduleFlip() {
   el('canvas').addEventListener('mousedown',e=>{
     if(e.button!==0||!aoeActive||!isHost||!S.combatMode) return;
     e.preventDefault(); e.stopPropagation();
-    aoeDragStart=toCanvas(e);
+    const raw=toCanvas(e);
+    aoeDragStart=snapAoeXY(raw.x,raw.y);
   });
   document.addEventListener('mousemove',e=>{
     if(!aoeDragStart||!aoeActive) return;
-    const {x,y}=toCanvas(e);
-    // Remove old preview
+    const raw=toCanvas(e); const {x,y}=snapAoeXY(raw.x,raw.y);
     if(aoePreviewEl&&aoePreviewEl.parentNode) aoePreviewEl.parentNode.removeChild(aoePreviewEl);
     const shape={type:aoeActive,color:aoeColor,x1:aoeDragStart.x,y1:aoeDragStart.y,x2:x,y2:y,id:'preview'};
     aoePreviewEl=aoeShapePath(shape);
-    if(aoePreviewEl){ styleAoeEl(aoePreviewEl,aoeColor,true); aoeSvg.appendChild(aoePreviewEl); aoeDistLabel(aoeSvg,aoeDragStart.x,aoeDragStart.y,x,y); }
+    if(aoePreviewEl){ styleAoeEl(aoePreviewEl,aoeColor,true,aoeActive); aoeSvg.appendChild(aoePreviewEl); aoeDistLabel(aoeSvg,aoeDragStart.x,aoeDragStart.y,x,y); }
   });
   document.addEventListener('mouseup',e=>{
     if(!aoeDragStart||!aoeActive||e.button!==0) return;
-    // Remove preview and dist label
     if(aoePreviewEl&&aoePreviewEl.parentNode) aoePreviewEl.parentNode.removeChild(aoePreviewEl);
     aoePreviewEl=null;
     const old=aoeSvg.getElementById('aoe-dist-label'); if(old) old.parentNode.removeChild(old);
-    const {x,y}=toCanvas(e);
+    const raw=toCanvas(e); const {x,y}=snapAoeXY(raw.x,raw.y);
     if(Math.hypot(x-aoeDragStart.x,y-aoeDragStart.y)>8){
       const shape={id:uid(),type:aoeActive,color:aoeColor,x1:aoeDragStart.x,y1:aoeDragStart.y,x2:x,y2:y};
       send({type:'add_aoe',shape});
