@@ -993,6 +993,7 @@ function addLogEntry(sides,rolls,total,mode,mod,name) {
   diceLog.unshift({sides,rolls,total,mode,mod,name,color,dark}); if(diceLog.length>LOG_MAX) diceLog.pop();
   const log=el('dice-log'); log.innerHTML='';
   diceLog.forEach((e,i)=>{
+    const d=document.createElement('div');
     d.className='log-entry'+(i?' old':'')+(e.dark?' dark-palette':'');
     d.style.color = e.color||'var(--gold)';
     if(i>0) d.style.opacity='0.55';
