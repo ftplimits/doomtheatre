@@ -443,14 +443,14 @@ body.browser-mode #aoe-toolbar { right:calc(50% + 165px); }
 }
 body.combat #aoe-layer { display:block; }
 .aoe-shape {
-  fill-opacity:0.12; stroke-width:2.5; cursor:pointer;
+  fill-opacity:0.12; cursor:pointer;
   animation:aoe-pulse 2.2s ease-in-out infinite;
 }
 @keyframes aoe-pulse {
   0%,100% { stroke-opacity:.75; }
   50%      { stroke-opacity:1;  filter:drop-shadow(0 0 8px var(--aoe-glow)); }
 }
-.aoe-preview { fill-opacity:0.08; stroke-width:2; stroke-dasharray:8 4; stroke-opacity:.6; }
+.aoe-preview { fill-opacity:0.08; stroke-dasharray:8 4; stroke-opacity:.6; }
 
 /* ── PING LAYER (inside canvas) ── */
 #ping-layer {
@@ -1166,12 +1166,18 @@ function aoeShapePath(shape) {
 function styleAoeEl(e_,color,preview,shapeType){
   e_.setAttribute('stroke',color); e_.setAttribute('fill',color);
   e_.setAttribute('fill-opacity',preview?'0.06':'0.12');
-  // Line tool: stroke width = one grid cell (corridor shape)
-  const sw = shapeType==='line' ? CELL.toString() : (preview?'2':'2.5');
-  e_.setAttribute('stroke-width',sw);
-  e_.setAttribute('stroke-linecap','round');
-  if(!preview){ e_.classList.add('aoe-shape'); e_.setAttribute('filter','url(#aoe-glow-filter)'); }
-  else e_.classList.add('aoe-preview');
+  // Use inline style so it overrides any CSS class stroke-width rules
+  const sw = shapeType==='line' ? CELL : (preview ? 2 : 2.5);
+  e_.style.strokeWidth = sw+'px';
+  e_.style.strokeLinecap = 'round';
+  if(preview){
+    e_.classList.add('aoe-preview');
+    // For line preview: show corridor outline as dashed rectangle instead of thin line
+    if(shapeType==='line') e_.style.strokeDasharray='none';
+  } else {
+    e_.classList.add('aoe-shape');
+    e_.setAttribute('filter','url(#aoe-glow-filter)');
+  }
   return e_;
 }
 
@@ -1450,13 +1456,14 @@ function scheduleFlip() {
   });
   el('aoe-clear').addEventListener('click',()=>{ if(isHost) send({type:'clear_aoe'}); });
 
-  // AoE drawing on canvas
+  // AoE drawing on canvas — capture phase intercepts clicks on tokens too
   el('canvas').addEventListener('mousedown',e=>{
     if(e.button!==0||!aoeActive||!isHost||!S.combatMode) return;
-    e.preventDefault(); e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation(); // prevent token drag starting
     const raw=toCanvas(e);
     aoeDragStart=snapAoeXY(raw.x,raw.y);
-  });
+  }, {capture:true});
   document.addEventListener('mousemove',e=>{
     if(!aoeDragStart||!aoeActive) return;
     const raw=toCanvas(e); const {x,y}=snapAoeXY(raw.x,raw.y);
