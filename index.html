@@ -890,12 +890,15 @@ document.addEventListener('mouseup',e=>{
 
 // ── HANDOUT ──────────────────────────────────────────────────────
 function showHandout(url) {
+  console.log('[Handout] SHOW, overlay display was:', el('handout-overlay').style.display);
   el('handout-img').src=url;
   el('handout-overlay').style.display='flex';
 }
 function dismissHandout() {
+  console.log('[Handout] DISMISS called, display was:', el('handout-overlay').style.display);
   el('handout-overlay').style.display='none';
   el('handout-img').removeAttribute('src');
+  console.log('[Handout] display now:', el('handout-overlay').style.display);
 }
 
 // ── LIBRARIES ────────────────────────────────────────────────────
@@ -956,6 +959,7 @@ function rollDie(sides) {
   }
   total += ds.mod; // ability score modifier
   send({type:'dice_roll', sides, rolls, total, mode, mod:ds.mod, name:S.dmName||'DM'});
+  if(window.onDiceRolled) window.onDiceRolled(sides);
 }
 
 function showDicePopup(sides, rolls, total, mode, mod, name) {
@@ -972,11 +976,16 @@ function showDicePopup(sides, rolls, total, mode, mod, name) {
   popTimer=setTimeout(()=>p.classList.remove('visible'),2000);
 }
 
+let currentDiceFill = '#f5f0e0'; // tracks active palette fill for log colouring
+
 function addLogEntry(sides,rolls,total,mode,mod,name) {
-  diceLog.unshift({sides,rolls,total,mode,mod,name}); if(diceLog.length>LOG_MAX) diceLog.pop();
+  const color = currentDiceFill;
+  diceLog.unshift({sides,rolls,total,mode,mod,name,color}); if(diceLog.length>LOG_MAX) diceLog.pop();
   const log=el('dice-log'); log.innerHTML='';
   diceLog.forEach((e,i)=>{
     const d=document.createElement('div'); d.className='log-entry'+(i?' old':'');
+    d.style.color = e.color||'var(--gold)';
+    if(i>0) d.style.opacity='0.55';
     const tag=e.mode==='adv'?'ADV':e.mode==='dis'?'DIS':`${e.rolls.length}d${e.sides}`;
     const modTag=e.mod?(e.mod>0?'+'+e.mod:''+e.mod):'';
     d.textContent=`${e.name}: ${tag}${modTag} → ${e.total}`;
@@ -1205,10 +1214,14 @@ function scheduleFlip() {
   // Handout
   // Handout — click background or close button to dismiss; Escape key also works
   el('handout-overlay').addEventListener('click', e=>{
+    console.log('[Handout] overlay click | target:', e.target.id||e.target.tagName, '| isOverlay:', e.target===el('handout-overlay'));
     if(e.target === el('handout-overlay')) { e.stopPropagation(); send({type:'dismiss_handout'}); }
   });
-  el('handout-close').addEventListener('click', e=>{ e.stopPropagation(); send({type:'dismiss_handout'}); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('handout-overlay').style.display==='flex') send({type:'dismiss_handout'}); });
+  el('handout-close').addEventListener('click', e=>{
+    console.log('[Handout] close btn clicked');
+    e.stopPropagation(); send({type:'dismiss_handout'});
+  });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('handout-overlay').style.display==='flex'){ console.log('[Handout] Escape'); send({type:'dismiss_handout'}); } });
 
   // DM Screen uploads
   document.querySelectorAll('.upload-btn').forEach(btn=>btn.addEventListener('click',()=>el('upload-'+btn.dataset.cat).click()));
@@ -1234,6 +1247,7 @@ function scheduleFlip() {
   let activePalette = DICE_PALETTES[0];
   function applyDicePalette(p) {
     activePalette = p;
+    currentDiceFill = p.fill; // exposed at top level for addLogEntry
     document.documentElement.style.setProperty('--dice-fill',   p.fill);
     document.documentElement.style.setProperty('--dice-stroke', p.stroke);
     el('dice-palette-btn').style.background = p.fill;
@@ -1248,7 +1262,16 @@ function scheduleFlip() {
     s.addEventListener('click',()=>{ applyDicePalette(p); el('dice-palette-popup').classList.remove('open'); });
     el('dice-palette-popup').appendChild(s);
   });
-  applyDicePalette(DICE_PALETTES[0]);
+  // After roll: reset dice state to defaults (keep colour)
+  window.onDiceRolled = function(sides) {
+    const ds=getDSt(sides);
+    ds.mod=0; ds.count=1; ds.mode='normal';
+    updateDieBadge(sides);
+    updateDieModeStyle(sides);
+  };
+
+  // Track active dice fill colour for roll log
+  applyDicePalette(DICE_PALETTES[0]); // sets currentDiceFill on first run
   // Position popup above toggle btn on open
   el('dice-palette-btn').addEventListener('click', e=>{
     const popup=el('dice-palette-popup');
@@ -1263,6 +1286,15 @@ function scheduleFlip() {
 
   // ── DICE CONTEXT MENU ────────────────────────────────────────
   let diceCtxTarget = null;
+
+  function fireCtxRoll() {
+    if(!diceCtxTarget || (!isHost && !hostConn?.open)) return;
+    const dBtn=document.querySelector(`.die-btn[data-sides="${diceCtxTarget}"]`);
+    if(dBtn){ dBtn.classList.remove('rolling'); void dBtn.offsetWidth; dBtn.classList.add('rolling'); dBtn.addEventListener('animationend',()=>dBtn.classList.remove('rolling'),{once:true}); }
+    rollDie(diceCtxTarget);
+    el('dice-ctx').classList.remove('open');
+  }
+
   // Build count buttons 1-10
   for(let i=1;i<=10;i++){
     const b=document.createElement('button'); b.className='dctx-count-btn'; b.textContent=i; b.dataset.count=i;
@@ -1271,6 +1303,7 @@ function scheduleFlip() {
       getDSt(diceCtxTarget).count=i;
       updateDieBadge(diceCtxTarget);
       refreshDiceCtx(diceCtxTarget);
+      fireCtxRoll();
     });
     el('dctx-counts').appendChild(b);
   }
@@ -1280,6 +1313,7 @@ function scheduleFlip() {
     getDSt(diceCtxTarget).mode=b.dataset.mode;
     updateDieModeStyle(diceCtxTarget);
     refreshDiceCtx(diceCtxTarget);
+    fireCtxRoll();
   }));
 
   function updateDieBadge(sides) {
