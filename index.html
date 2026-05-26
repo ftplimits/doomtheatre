@@ -994,7 +994,7 @@ function addLogEntry(sides,rolls,total,mode,mod,name) {
   diceLog.forEach((e,i)=>{
     const d=document.createElement('div'); d.className='log-entry'+(i?' old':'');
     d.style.color = e.color||'var(--gold)';
-    if(e.dark) d.style.textShadow='0 0 4px rgba(255,255,255,0.85), 0 0 1px #fff';
+    if(e.dark) d.style.webkitTextStroke='0.4px rgba(255,255,255,0.75)';
     if(i>0) d.style.opacity='0.55';
     const tag=e.mode==='adv'?'ADV':e.mode==='dis'?'DIS':`${e.rolls.length}d${e.sides}`;
     const modTag=e.mod?(e.mod>0?'+'+e.mod:''+e.mod):'';
