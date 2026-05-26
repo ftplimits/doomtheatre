@@ -58,7 +58,7 @@ body.combat #combat-overlay { opacity:1; }
 
 /* ── NORMAL AVATAR ZONES (inside canvas) ── */
 #upper-zone, #lower-zone {
-  position:absolute; left:0; right:0;
+  position:absolute; left:0; right:0; z-index:3;
   display:flex; flex-direction:row; justify-content:center; align-items:flex-end;
   gap:14px; padding:0 140px; pointer-events:none;
 }
@@ -101,7 +101,7 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 }
 
 /* ── COMBAT ARENA ── */
-#combat-arena { position:absolute; inset:0; display:none; pointer-events:none; }
+#combat-arena { position:absolute; inset:0; z-index:3; display:none; pointer-events:none; }
 body.combat #combat-arena { display:block; }
 
 .ca-wrap { position:absolute; width:120px; pointer-events:all; cursor:grab; display:flex; flex-direction:column; align-items:center; }
@@ -152,14 +152,7 @@ body.panel-open #toolbar { right:294px; }
 .tbtn.active { color:#ff6060; border-color:var(--blood); background:rgba(60,0,0,.4); box-shadow:0 0 12px rgba(139,0,0,.5); }
 
 /* ── MEASURE LABEL ── */
-#measure-label {
-  display:none; position:fixed; z-index:80; pointer-events:none;
-  background:rgba(0,0,0,.78); border:1px solid var(--gold-dim);
-  border-radius:4px; padding:3px 10px;
-  font-family:'Cinzel',serif; font-size:12px; font-weight:600;
-  color:var(--gold); letter-spacing:.1em; white-space:nowrap;
-  text-shadow:0 1px 3px rgba(0,0,0,1);
-}
+/* measure-label replaced by #measure-svg inside canvas */
 
 /* ── DM SCREEN ── */
 #dm-screen { position:fixed; top:0; right:0; bottom:0; width:280px; background:var(--panel-bg); border-left:1px solid var(--border); z-index:30; transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); display:flex; flex-direction:column; overflow:hidden; }
@@ -293,13 +286,19 @@ body.panel-open #dice-log { right:296px; }
 @keyframes log-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
 /* ── BLOOD LAYER ── */
-#blood-layer { position:absolute; inset:0; z-index:8; pointer-events:none; }
+#blood-layer { position:absolute; inset:0; z-index:2; pointer-events:none; }
 .blood-spot {
   position:absolute; border-radius:50% 40% 60% 35%;
   background:radial-gradient(ellipse at 35% 35%, #cc1111, #5a0000);
   opacity:0; animation:blood-appear .4s ease forwards;
 }
 @keyframes blood-appear { from{opacity:0;transform:scale(.3)} to{opacity:.88} }
+
+/* ── MEASURE SVG (inside canvas) ── */
+#measure-svg {
+  position:absolute; inset:0; width:100%; height:100%;
+  pointer-events:none; z-index:25; display:none; overflow:visible;
+}
 
 /* ── CONTEXT MENU ── */
 #ctx-menu {
@@ -391,6 +390,7 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
     <div id="upper-zone"></div>
     <div id="lower-zone"></div>
     <div id="combat-arena"></div>
+    <svg id="measure-svg" xmlns="http://www.w3.org/2000/svg"></svg>
   </div>
 </div>
 
@@ -438,9 +438,6 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
 </div>
 <div id="dice-palette-popup"></div>
 <div id="dice-log"></div>
-
-<!-- MEASURE LABEL -->
-<div id="measure-label"></div>
 
 <!-- TOOLBAR -->
 <div id="toolbar">
@@ -825,16 +822,35 @@ document.addEventListener('mousemove',e=>{
   const rawY=cDrag.startCY+(y-cDrag.startMY);
   cDrag.wrap.style.left=rawX+'px';
   cDrag.wrap.style.top =rawY+'px';
-  // Measure tool
+
+  // Measure line (SVG in canvas space)
+  const half=CELL/2;
+  const sx=cDrag.startCX+half, sy=cDrag.startCY+half;
+  const ex=rawX+half,           ey=rawY+half;
   const dxSq=(rawX-cDrag.startCX)/CELL, dySq=(rawY-cDrag.startCY)/CELL;
   const dist=Math.round(Math.sqrt(dxSq*dxSq+dySq*dySq));
-  const ml=el('measure-label');
-  if(dist>0){ ml.textContent=`${dist} sq · ${dist*5} ft`; ml.style.display='block'; ml.style.left=(e.clientX+18)+'px'; ml.style.top=(e.clientY-32)+'px'; }
-  else ml.style.display='none';
+  const svg=el('measure-svg');
+  if(dist>0){
+    svg.style.display='block';
+    const mx=(sx+ex)/2, my=(sy+ey)/2, ft=dist*5;
+    const lw=ft>=100?76:ft>=10?66:56; // label width based on text length
+    svg.innerHTML=`
+      <circle cx="${sx}" cy="${sy}" r="6" fill="rgba(200,169,110,0.75)"/>
+      <line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}"
+        stroke="rgba(200,169,110,0.75)" stroke-width="2" stroke-dasharray="10 5"/>
+      <circle cx="${ex}" cy="${ey}" r="6" fill="rgba(200,169,110,0.75)"/>
+      <rect x="${mx-lw/2}" y="${my-13}" width="${lw}" height="24" rx="5" fill="rgba(0,0,0,0.8)"/>
+      <text x="${mx}" y="${my+6}" text-anchor="middle"
+        font-family="Cinzel,serif" font-size="14" font-weight="700"
+        fill="#c8a96e" letter-spacing="0.5">${ft} ft</text>`;
+  } else {
+    svg.style.display='none';
+  }
 });
 document.addEventListener('mouseup',e=>{
   if(!cDrag) return;
-  el('measure-label').style.display='none';
+  el('measure-svg').style.display='none';
+  el('measure-svg').innerHTML='';
   const {x,y}=toCanvas(e);
   const cx=clamp(snap(cDrag.startCX+(x-cDrag.startMX)), 0, GRID_W-CELL);
   const cy=clamp(snap(cDrag.startCY+(y-cDrag.startMY)), 0, GRID_H-CELL);
