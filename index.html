@@ -683,7 +683,7 @@ function handleMsg(msg,fromConn) {
       break;
     case 'set_weather': S.weather=msg.effect; if(window.applyWeather) window.applyWeather(msg.effect); if(isHost) broadcast(msg,fromConn); break;
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
-    case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.name); if(isHost) broadcast(msg,fromConn); break;
+    case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.mod||0,msg.name); if(isHost) broadcast(msg,fromConn); break;
   }
 }
 
@@ -890,7 +890,7 @@ document.addEventListener('mouseup',e=>{
 
 // ── HANDOUT ──────────────────────────────────────────────────────
 function showHandout(url)  { el('handout-img').src=url; el('handout-overlay').classList.add('visible'); }
-function dismissHandout()  { el('handout-overlay').classList.remove('visible'); el('handout-img').src=''; }
+function dismissHandout()  { el('handout-overlay').classList.remove('visible'); el('handout-img').removeAttribute('src'); }
 
 // ── LIBRARIES ────────────────────────────────────────────────────
 function renderLibraries() {
@@ -932,7 +932,7 @@ const diceLog=[], LOG_MAX=10;
 const diceState={};  // {sides: {count, mode}}
 let popTimer=null;
 
-function getDSt(sides){ if(!diceState[sides]) diceState[sides]={count:1,mode:'normal'}; return diceState[sides]; }
+function getDSt(sides){ if(!diceState[sides]) diceState[sides]={count:1,mode:'normal',mod:0}; return diceState[sides]; }
 function rnd(s){ return Math.floor(Math.random()*s)+1; }
 
 function rollDie(sides) {
@@ -948,14 +948,16 @@ function rollDie(sides) {
     for(let i=0;i<ds.count;i++) rolls.push(rnd(sides));
     total=rolls.reduce((a,b)=>a+b,0);
   }
-  send({type:'dice_roll', sides, rolls, total, mode, name:S.dmName||'DM'});
+  total += ds.mod; // ability score modifier
+  send({type:'dice_roll', sides, rolls, total, mode, mod:ds.mod, name:S.dmName||'DM'});
 }
 
-function showDicePopup(sides, rolls, total, mode, name) {
+function showDicePopup(sides, rolls, total, mode, mod, name) {
   const p=el('dice-popup');
   const modeStr=mode==='adv'?'ADV ':mode==='dis'?'DIS ':'';
   const countStr=(rolls.length>1&&mode==='normal')?`${rolls.length}×`:'';
-  p.querySelector('.pop-die').textContent=`${modeStr}${countStr}d${sides}`;
+  const modStr=mod?( mod>0?` +${mod}`:` ${mod}`):'';
+  p.querySelector('.pop-die').textContent=`${modeStr}${countStr}d${sides}${modStr}`;
   p.querySelector('.pop-result').textContent=total;
   const breakdown=(rolls.length>1)?`[${rolls.join(', ')}] · `:'';
   p.querySelector('.pop-name').textContent=breakdown+name;
@@ -964,16 +966,17 @@ function showDicePopup(sides, rolls, total, mode, name) {
   popTimer=setTimeout(()=>p.classList.remove('visible'),2000);
 }
 
-function addLogEntry(sides,rolls,total,mode,name) {
-  diceLog.unshift({sides,rolls,total,mode,name}); if(diceLog.length>LOG_MAX) diceLog.pop();
+function addLogEntry(sides,rolls,total,mode,mod,name) {
+  diceLog.unshift({sides,rolls,total,mode,mod,name}); if(diceLog.length>LOG_MAX) diceLog.pop();
   const log=el('dice-log'); log.innerHTML='';
   diceLog.forEach((e,i)=>{
     const d=document.createElement('div'); d.className='log-entry'+(i?' old':'');
     const tag=e.mode==='adv'?'ADV':e.mode==='dis'?'DIS':`${e.rolls.length}d${e.sides}`;
-    d.textContent=`${e.name}: ${tag} → ${e.total}`;
+    const modTag=e.mod?(e.mod>0?'+'+e.mod:''+e.mod):'';
+    d.textContent=`${e.name}: ${tag}${modTag} → ${e.total}`;
     log.appendChild(d);
   });
-  showDicePopup(sides,rolls,total,mode,name);
+  showDicePopup(sides,rolls,total,mode,mod,name);
 }
 
 // ── WEATHER ───────────────────────────────────────────────────────
@@ -996,9 +999,15 @@ function initWeatherCanvas() {
   resizeWC();
   window.addEventListener('resize', resizeWC);
 }
+let _resizeRAF=null;
 function resizeWC() {
-  const c=el('weather-canvas');
-  c.width=window.innerWidth; c.height=window.innerHeight;
+  if(_resizeRAF) return; // already queued — skip
+  _resizeRAF=requestAnimationFrame(()=>{
+    _resizeRAF=null;
+    const c=el('weather-canvas');
+    const W=window.innerWidth, H=window.innerHeight;
+    if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
+  });
 }
 function stopWeather() {
   if(wRAF){ cancelAnimationFrame(wRAF); wRAF=null; }
@@ -1014,8 +1023,8 @@ function mkPart(fx, W, H, spread) {
     case 'embers':    return {x:r()*W,            y:spread?r()*H:H+10,  spd:0.4+r()*2,  sz:1+r()*3,  drift:(r()-.5)*.6, ph:r()*6.28, op:r()};
     case 'leaves':    return {x:r()*W,            y:spread?r()*H:-20,   spd:0.7+r()*1.5, rot:r()*6.28, rs:(r()-.5)*.09, ph:r()*6.28, sz:5+r()*9, col:['#c0392b','#e67e22','#f39c12','#a0522d','#8b4513'][0|r()*5]};
     case 'fireflies': return {x:r()*W,            y:r()*H,              vx:(r()-.5)*.6, vy:(r()-.5)*.4, ph:r()*6.28, sz:2+r()*2.5};
-    case 'fog':       return {x:r()*W,            y:r()*H,              vx:0.15+r()*.3, sz:90+r()*220, op:0.04+r()*.1};
-    case 'dust':      return {x:r()*W,            y:r()*H,              vx:(r()-.5)*.7, vy:(r()-.5)*.7, sz:0.5+r()*1.8, col:r()>.45?'rgba(200,175,110,':'rgba(155,145,135,', op:0.2+r()*.5, ph:r()*6.28};
+    case 'fog':       return {x:r()*W,            y:r()*H,              vx:0.15+r()*.3, sz:90+r()*220, op:0.05+r()*.125};
+    case 'dust':      return {x:r()*W,            y:r()*H,              vx:(r()-.5)*.7, vy:(r()-.5)*.7, sz:0.5+r()*1.8, col:r()>.45?'rgba(200,175,110,':'rgba(155,145,135,', op:0.25+r()*.625, ph:r()*6.28};
   }
 }
 function isDead(p, fx, W, H) {
@@ -1188,8 +1197,8 @@ function scheduleFlip() {
   });
 
   // Handout
-  el('handout-overlay').addEventListener('click',e=>{ if(e.target===el('handout-overlay')) send({type:'dismiss_handout'}); });
-  el('handout-close').addEventListener('click',()=>send({type:'dismiss_handout'}));
+  el('handout-overlay').addEventListener('click',e=>{ if(e.target===el('handout-overlay')){ e.stopPropagation(); send({type:'dismiss_handout'}); } });
+  el('handout-close').addEventListener('click',e=>{ e.stopPropagation(); send({type:'dismiss_handout'}); });
 
   // DM Screen uploads
   document.querySelectorAll('.upload-btn').forEach(btn=>btn.addEventListener('click',()=>el('upload-'+btn.dataset.cat).click()));
@@ -1267,8 +1276,8 @@ function scheduleFlip() {
     const btn=document.querySelector(`.die-btn[data-sides="${sides}"]`); if(!btn) return;
     const badge=btn.querySelector('.die-badge');
     const ds=getDSt(sides);
-    const show=(ds.count>1||(sides===20&&ds.mode!=='normal'));
-    if(sides===20&&ds.mode!=='normal') { badge.textContent=ds.mode==='adv'?'A':'D'; badge.classList.add('visible'); }
+    if(ds.mod!==0) { badge.textContent=ds.mod>0?'+'+ds.mod:''+ds.mod; badge.classList.add('visible'); }
+    else if(sides===20&&ds.mode!=='normal') { badge.textContent=ds.mode==='adv'?'A':'D'; badge.classList.add('visible'); }
     else if(ds.count>1) { badge.textContent=ds.count; badge.classList.add('visible'); }
     else { badge.classList.remove('visible'); }
   }
@@ -1302,15 +1311,19 @@ function scheduleFlip() {
       diceCtxTarget=sides;
       const ctx=el('dice-ctx');
       refreshDiceCtx(sides);
-      ctx.style.left=e.clientX+'px';
-      ctx.style.top =(e.clientY-ctx.offsetHeight-8)+'px';
       ctx.classList.add('open');
+      // Measure after open so offsetHeight is real, then position smartly
+      const mh=ctx.offsetHeight, mw=ctx.offsetWidth;
+      const x=clamp(e.clientX, 4, window.innerWidth-mw-4);
+      const yAbove=e.clientY-mh-8;
+      ctx.style.left=x+'px';
+      ctx.style.top=(yAbove>=4 ? yAbove : Math.min(e.clientY+8, window.innerHeight-mh-4))+'px';
     });
 
     btn.addEventListener('wheel',e=>{
       e.preventDefault();
       const ds=getDSt(sides);
-      ds.count=clamp(ds.count+(e.deltaY<0?1:-1),1,10);
+      ds.mod=clamp(ds.mod+(e.deltaY<0?1:-1),-20,20);
       updateDieBadge(sides);
     },{passive:false});
   });
