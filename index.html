@@ -1110,6 +1110,19 @@ function startWeather(fx) {
   wRAF=requestAnimationFrame(frame);
 }
 
+function buildWeatherMenu(active) {
+  const menu=el('weather-menu'); menu.innerHTML='';
+  WEATHER_OPTIONS.forEach(opt=>{
+    const item=document.createElement('div'); item.className='wm-item'+(opt.id===active?' active':'');
+    item.innerHTML=`<span class="wm-emoji">${opt.emoji}</span>${opt.label}`;
+    item.addEventListener('click',()=>{
+      if(!isHost) return;
+      send({type:'set_weather', effect:opt.id});
+      menu.classList.remove('open');
+    });
+    menu.appendChild(item);
+  });
+}
 window.applyWeather=function(fx){ startWeather(fx); buildWeatherMenu(fx); };
 function scheduleFlip() {
   setTimeout(()=>{
@@ -1161,19 +1174,6 @@ function scheduleFlip() {
 
   // Weather button & menu (host only)
   initWeatherCanvas();
-  function buildWeatherMenu(active) {
-    const menu=el('weather-menu'); menu.innerHTML='';
-    WEATHER_OPTIONS.forEach(opt=>{
-      const item=document.createElement('div'); item.className='wm-item'+(opt.id===active?' active':'');
-      item.innerHTML=`<span class="wm-emoji">${opt.emoji}</span>${opt.label}`;
-      item.addEventListener('click',()=>{
-        if(!isHost) return;
-        send({type:'set_weather', effect:opt.id});
-        menu.classList.remove('open');
-      });
-      menu.appendChild(item);
-    });
-  }
   buildWeatherMenu(null);
   el('btn-weather').addEventListener('click', e=>{
     if(!isHost) return;
