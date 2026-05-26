@@ -39,7 +39,7 @@ html, body { width:100vw; height:100vh; overflow:hidden; background:#111; font-f
   transform-origin:top left;
   overflow:hidden;
   background:radial-gradient(ellipse at center,#1a1008 0%,#0d0a07 100%);
-  box-shadow: 0 0 0 3px var(--gold), 0 0 0 5px var(--gold-dim);
+  box-shadow: 0 0 0 6px var(--gold), 0 0 0 10px var(--gold-dim);
 }
 
 /* ── BACKDROP (inside canvas, absolute) ── */
@@ -365,7 +365,7 @@ body.browser-mode.tp-collapsed #dice-row   { left:50%; }
   background:rgba(6,3,1,.9); border:1px solid var(--gold-dim);
   border-radius:10px; padding:10px 32px;
   opacity:0;
-  top:50%; transform:translate(-50%,-50%);
+  top:40%; transform:translate(-50%,-50%);
   transition:opacity .25s ease;
   box-shadow:0 4px 24px rgba(0,0,0,.8);
 }
@@ -537,7 +537,8 @@ function setPeerCount()   { el('tp-peers').textContent=`Peers: ${guestConns.leng
 
 // ── CANVAS SCALE ─────────────────────────────────────────────────
 function updateScale() {
-  scale = Math.min(window.innerWidth / GRID_W, window.innerHeight / GRID_H);
+  const PAD = 14; // breathing room so gold border stays visible on all sides
+  scale = Math.min((window.innerWidth - PAD*2) / GRID_W, (window.innerHeight - PAD*2) / GRID_H);
   const offX = (window.innerWidth  - GRID_W * scale) / 2;
   const offY = (window.innerHeight - GRID_H * scale) / 2;
   const c = el('canvas');
@@ -663,7 +664,14 @@ function handleMsg(msg,fromConn) {
 }
 
 // ── RENDER ───────────────────────────────────────────────────────
-function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); applyCombat(); renderLibraries(); }
+// syncCombatState: applies combat class instantly with no transition (used by renderAll / full_state)
+function syncCombatState() {
+  document.body.classList.toggle('combat', S.combatMode);
+  el('btn-combat').classList.toggle('active', S.combatMode);
+  el('combat-arena').innerHTML='';
+  if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
+}
+function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
