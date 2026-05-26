@@ -279,10 +279,10 @@ body.panel-open #toolbar { right:294px; }
 .dctx-mode-btn[data-mode="dis"]    { background:rgba(74,26,26,.5); border-color:#5a3a3a; color:#e07070; }
 .dctx-mode-btn.active { filter:brightness(1.5); outline:1px solid #fff; }
 
-#dice-log { position:fixed; bottom:80px; right:16px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:160px; }
-body.panel-open #dice-log { right:296px; }
-.log-entry { font-family:'Cinzel',serif; font-size:11px; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,1); text-align:right; white-space:nowrap; animation:log-in .2s ease both; }
-.log-entry.old { color:var(--gold-dim); font-size:10px; }
+#dice-log { position:fixed; bottom:80px; right:21px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:240px; background:rgba(0,0,0,.5); border-radius:6px; padding:6px 10px; }
+body.panel-open #dice-log { right:301px; }
+.log-entry { font-family:'Cinzel',serif; font-size:17px; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,1); text-align:right; white-space:nowrap; animation:log-in .2s ease both; }
+.log-entry.old { color:var(--gold-dim); font-size:15px; }
 @keyframes log-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
 /* ── BLOOD LAYER ── */
@@ -318,6 +318,28 @@ body.panel-open #dice-log { right:296px; }
 
 .ca-frame.flipped .ca-name-bar { transform: scaleX(-1); }
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
+
+/* ── WEATHER CANVAS ── */
+#weather-canvas { position:fixed; inset:0; pointer-events:none; z-index:12; }
+
+/* ── WEATHER MENU ── */
+#weather-menu {
+  position:fixed; top:100px; right:14px; z-index:35;
+  background:var(--panel-bg); border:1px solid var(--border);
+  border-radius:8px; overflow:hidden; display:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.85); min-width:150px;
+}
+#weather-menu.open { display:block; }
+.wm-item {
+  padding:7px 16px; cursor:pointer; display:flex; align-items:center; gap:9px;
+  font-family:'Cinzel',serif; font-size:10px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--text); transition:background .12s;
+}
+.wm-item:hover  { background:rgba(139,0,0,.3); color:var(--gold); }
+.wm-item.active { color:var(--gold); background:rgba(80,40,0,.4); }
+.wm-emoji { font-size:16px; line-height:1; }
+
+body.panel-open #weather-menu { right:294px; }
 
 /* ── PEER STATUS ── */
 #peer-status { position:fixed; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.07); border-radius:20px; padding:3px 14px; font-size:9px; letter-spacing:.1em; color:var(--text-dim); z-index:60; pointer-events:none; font-family:'Cinzel',serif; text-transform:uppercase; }
@@ -439,10 +461,15 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
 <div id="dice-palette-popup"></div>
 <div id="dice-log"></div>
 
+<!-- WEATHER CANVAS -->
+<canvas id="weather-canvas"></canvas>
+<div id="weather-menu"></div>
+
 <!-- TOOLBAR -->
 <div id="toolbar">
-  <button class="tbtn" id="btn-screen" title="DM Screen">🗂</button>
-  <button class="tbtn" id="btn-combat" title="Combat Mode">⚔️</button>
+  <button class="tbtn" id="btn-combat"  title="Combat Mode">⚔️</button>
+  <button class="tbtn" id="btn-weather" title="Weather">🌦</button>
+  <button class="tbtn" id="btn-screen"  title="DM Screen">🗂</button>
 </div>
 
 <!-- DM SCREEN -->
@@ -513,7 +540,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = {
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false,
+  combatMode:false, weather:null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
 
@@ -654,7 +681,7 @@ function handleMsg(msg,fromConn) {
       if(window.spawnBloodAt) window.spawnBloodAt(msg.cx,msg.cy);
       if(isHost) broadcast(msg,fromConn);
       break;
-    case 'dismiss_handout': dismissHandout(); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_weather': S.weather=msg.effect; if(window.applyWeather) window.applyWeather(msg.effect); if(isHost) broadcast(msg,fromConn); break;
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
     case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.name); if(isHost) broadcast(msg,fromConn); break;
   }
@@ -668,7 +695,7 @@ function syncCombatState() {
   el('combat-arena').innerHTML='';
   if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 }
-function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); }
+function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); if(window.applyWeather) window.applyWeather(S.weather); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
@@ -949,7 +976,126 @@ function addLogEntry(sides,rolls,total,mode,name) {
   showDicePopup(sides,rolls,total,mode,name);
 }
 
-// ── RANDOM FLIP ───────────────────────────────────────────────────
+// ── WEATHER ───────────────────────────────────────────────────────
+const WEATHER_OPTIONS = [
+  {id:null,        label:'Clear',     emoji:'⭕'},
+  {id:'rain',      label:'Rain',      emoji:'🌧'},
+  {id:'snow',      label:'Snow',      emoji:'❄️'},
+  {id:'embers',    label:'Embers',    emoji:'🔥'},
+  {id:'leaves',    label:'Leaves',    emoji:'🍂'},
+  {id:'fireflies', label:'Fireflies', emoji:'✨'},
+  {id:'fog',       label:'Fog',       emoji:'🌫'},
+  {id:'dust',      label:'Dust',      emoji:'💨'},
+];
+
+let wRAF=null, wCtx=null, wParts=[];
+
+function initWeatherCanvas() {
+  const c=el('weather-canvas');
+  wCtx=c.getContext('2d');
+  resizeWC();
+  window.addEventListener('resize', resizeWC);
+}
+function resizeWC() {
+  const c=el('weather-canvas');
+  c.width=window.innerWidth; c.height=window.innerHeight;
+}
+function stopWeather() {
+  if(wRAF){ cancelAnimationFrame(wRAF); wRAF=null; }
+  if(wCtx) wCtx.clearRect(0,0,window.innerWidth,window.innerHeight);
+  wParts=[];
+}
+
+function mkPart(fx, W, H, spread) {
+  const r=Math.random;
+  switch(fx) {
+    case 'rain':      return {x:r()*W*1.4-W*0.2, y:spread?r()*H:-30,   spd:14+r()*8,  len:18+r()*18, drift:2+r()*3};
+    case 'snow':      return {x:r()*W,            y:spread?r()*H:-8,    spd:0.4+r()*1.4, sz:1.5+r()*3, ph:r()*6.28};
+    case 'embers':    return {x:r()*W,            y:spread?r()*H:H+10,  spd:0.4+r()*2,  sz:1+r()*3,  drift:(r()-.5)*.6, ph:r()*6.28, op:r()};
+    case 'leaves':    return {x:r()*W,            y:spread?r()*H:-20,   spd:0.7+r()*1.5, rot:r()*6.28, rs:(r()-.5)*.09, ph:r()*6.28, sz:5+r()*9, col:['#c0392b','#e67e22','#f39c12','#a0522d','#8b4513'][0|r()*5]};
+    case 'fireflies': return {x:r()*W,            y:r()*H,              vx:(r()-.5)*.6, vy:(r()-.5)*.4, ph:r()*6.28, sz:2+r()*2.5};
+    case 'fog':       return {x:r()*W,            y:r()*H,              vx:0.15+r()*.3, sz:90+r()*220, op:0.04+r()*.1};
+    case 'dust':      return {x:r()*W,            y:r()*H,              vx:(r()-.5)*.7, vy:(r()-.5)*.7, sz:0.5+r()*1.8, col:r()>.45?'rgba(200,175,110,':'rgba(155,145,135,', op:0.2+r()*.5, ph:r()*6.28};
+  }
+}
+function isDead(p, fx, W, H) {
+  if(fx==='rain')      return p.y>H+40;
+  if(fx==='snow')      return p.y>H+10;
+  if(fx==='embers')    return p.y<-20;
+  if(fx==='leaves')    return p.y>H+30;
+  if(fx==='fireflies') return false;
+  if(fx==='fog')       return p.x>W+p.sz;
+  if(fx==='dust')      return false;
+  return false;
+}
+function drawPart(ctx, p, fx) {
+  ctx.save();
+  switch(fx) {
+    case 'rain':
+      ctx.strokeStyle=`rgba(180,210,255,0.35)`;
+      ctx.lineWidth=1.5; ctx.beginPath();
+      ctx.moveTo(p.x,p.y); ctx.lineTo(p.x-p.drift*1.5, p.y-p.len);
+      ctx.stroke(); break;
+    case 'snow':
+      ctx.fillStyle=`rgba(230,240,255,0.75)`;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.sz,0,6.28); ctx.fill(); break;
+    case 'embers': {
+      const op=0.4+Math.sin(p.ph)*0.4;
+      ctx.fillStyle=`rgba(255,${80+0|Math.random()*60},0,${op})`;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.sz,0,6.28); ctx.fill(); break;
+    }
+    case 'leaves':
+      ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+      ctx.fillStyle=p.col; ctx.globalAlpha=0.85;
+      ctx.beginPath(); ctx.ellipse(0,0,p.sz*.6,p.sz*.35,0,0,6.28); ctx.fill(); break;
+    case 'fireflies': {
+      const op=0.35+Math.sin(p.ph)*0.35;
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.sz*3);
+      g.addColorStop(0,`rgba(200,255,120,${op})`);
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,p.sz*3,0,6.28); ctx.fill(); break;
+    }
+    case 'fog': {
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.sz);
+      g.addColorStop(0,`rgba(200,210,220,${p.op})`);
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,p.sz,0,6.28); ctx.fill(); break;
+    }
+    case 'dust': {
+      const op=p.op*(0.4+Math.sin(p.ph)*0.35);
+      ctx.fillStyle=p.col+op+')';
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.sz,0,6.28); ctx.fill(); break;
+    }
+  }
+  ctx.restore();
+}
+function updatePart(p, fx, W, H) {
+  if(fx==='rain')      { p.y+=p.spd; p.x+=p.drift; }
+  if(fx==='snow')      { p.y+=p.spd; p.x+=Math.sin(p.ph)*0.5; p.ph+=0.015; }
+  if(fx==='embers')    { p.y-=p.spd; p.x+=p.drift; p.ph+=0.06; }
+  if(fx==='leaves')    { p.y+=p.spd; p.x+=Math.sin(p.ph)*1.2; p.rot+=p.rs; p.ph+=0.025; }
+  if(fx==='fireflies') { p.x+=p.vx; p.y+=p.vy; p.vx+=(Math.random()-.5)*.04; p.vy+=(Math.random()-.5)*.04; p.vx=Math.max(-0.8,Math.min(0.8,p.vx)); p.vy=Math.max(-0.6,Math.min(0.6,p.vy)); if(p.x<0||p.x>W) p.vx*=-1; if(p.y<0||p.y>H) p.vy*=-1; p.ph+=0.05; }
+  if(fx==='fog')       { p.x+=p.vx; }
+  if(fx==='dust')      { p.x+=p.vx; p.y+=p.vy; p.vx+=(Math.random()-.5)*.04; p.vy+=(Math.random()-.5)*.04; p.vx=Math.max(-1,Math.min(1,p.vx)); p.vy=Math.max(-0.8,Math.min(0.8,p.vy)); if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0; p.ph+=0.018; }
+}
+
+function startWeather(fx) {
+  stopWeather();
+  if(!fx) return;
+  const W=window.innerWidth, H=window.innerHeight;
+  const counts={rain:200,snow:150,embers:80,leaves:80,fireflies:40,fog:10,dust:70};
+  const n=counts[fx]||100;
+  for(let i=0;i<n;i++) wParts.push(mkPart(fx,W,H,true));
+  function frame(){
+    const W2=window.innerWidth, H2=window.innerHeight;
+    wCtx.clearRect(0,0,W2,H2);
+    wParts.forEach((p,i)=>{ updatePart(p,fx,W2,H2); drawPart(wCtx,p,fx); if(isDead(p,fx,W2,H2)) wParts[i]=mkPart(fx,W2,H2,false); });
+    wRAF=requestAnimationFrame(frame);
+  }
+  wRAF=requestAnimationFrame(frame);
+}
+
+window.applyWeather=function(fx){ startWeather(fx); buildWeatherMenu(fx); };
 function scheduleFlip() {
   setTimeout(()=>{
     if(!S.combatMode) {
@@ -997,6 +1143,30 @@ function scheduleFlip() {
   el('btn-screen').addEventListener('click',()=>{ const open=el('dm-screen').classList.toggle('open'); document.body.classList.toggle('panel-open',open); });
   el('btn-close-screen').addEventListener('click',()=>{ el('dm-screen').classList.remove('open'); document.body.classList.remove('panel-open'); });
   el('btn-combat').addEventListener('click',()=>{ if(isHost) send({type:'set_combat',active:!S.combatMode}); });
+
+  // Weather button & menu (host only)
+  initWeatherCanvas();
+  function buildWeatherMenu(active) {
+    const menu=el('weather-menu'); menu.innerHTML='';
+    WEATHER_OPTIONS.forEach(opt=>{
+      const item=document.createElement('div'); item.className='wm-item'+(opt.id===active?' active':'');
+      item.innerHTML=`<span class="wm-emoji">${opt.emoji}</span>${opt.label}`;
+      item.addEventListener('click',()=>{
+        if(!isHost) return;
+        send({type:'set_weather', effect:opt.id});
+        menu.classList.remove('open');
+      });
+      menu.appendChild(item);
+    });
+  }
+  buildWeatherMenu(null);
+  el('btn-weather').addEventListener('click', e=>{
+    if(!isHost) return;
+    const menu=el('weather-menu');
+    menu.classList.toggle('open');
+    e.stopPropagation();
+  });
+  document.addEventListener('click',()=>el('weather-menu').classList.remove('open'));
 
   // DM Avatar — single click → upload, double click → flip
   let dmClickTimer=null;
