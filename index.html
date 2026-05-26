@@ -395,7 +395,69 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
 #dice-popup.visible { opacity:1; }
 #dice-popup .pop-die    { font-family:'Cinzel',serif; font-size:10px; letter-spacing:.2em; color:var(--text-dim); text-transform:uppercase; }
 #dice-popup .pop-result { font-family:'Cinzel',serif; font-size:52px; font-weight:900; color:var(--gold); line-height:1; }
-#dice-popup .pop-name   { font-family:'Cinzel',serif; font-size:9px; letter-spacing:.12em; color:var(--text-dim); margin-top:2px; }
+/* ── BOTTOM BAR (wraps AoE toolbar + dice row) ── */
+#bottom-bar {
+  position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+  z-index:15; display:flex; align-items:center; gap:14px;
+}
+body.browser-mode #bottom-bar { left:calc(50% + 95px); }
+body.browser-mode.tp-collapsed #bottom-bar { left:50%; }
+
+/* ── AOE TOOLBAR ── */
+#aoe-toolbar {
+  display:none; align-items:center; gap:5px;
+  background:var(--panel-bg); border:1px solid var(--border);
+  border-radius:8px; padding:5px 8px;
+}
+body.combat #aoe-toolbar { display:flex; }
+.aoe-shape-btn {
+  width:36px; height:36px; background:none; border:1px solid var(--border);
+  border-radius:5px; color:var(--gold-dim); font-size:18px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .15s, border-color .15s, color .15s;
+}
+.aoe-shape-btn:hover  { border-color:var(--gold-dim); color:var(--gold); }
+.aoe-shape-btn.active { border-color:var(--gold); color:var(--gold); background:rgba(200,169,110,.15); }
+.aoe-color-btn {
+  width:18px; height:18px; border-radius:3px; cursor:pointer;
+  border:2px solid rgba(0,0,0,.4); transition:transform .15s, border-color .15s;
+  flex-shrink:0;
+}
+.aoe-color-btn:hover  { transform:scale(1.25); }
+.aoe-color-btn.active { border-color:#fff; }
+#aoe-clear {
+  width:28px; height:28px; background:none; border:1px solid var(--border);
+  border-radius:4px; color:var(--text-dim); font-size:13px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+#aoe-clear:hover { color:#f88; border-color:#f88; }
+.aoe-divider { width:1px; height:28px; background:var(--border); flex-shrink:0; }
+
+/* ── AOE LAYER (inside canvas) ── */
+#aoe-layer {
+  position:absolute; inset:0; width:100%; height:100%;
+  pointer-events:none; z-index:22; display:none; overflow:visible;
+}
+body.combat #aoe-layer { display:block; }
+.aoe-shape {
+  fill-opacity:0.12; stroke-width:2.5; cursor:pointer;
+  animation:aoe-pulse 2.2s ease-in-out infinite;
+}
+@keyframes aoe-pulse {
+  0%,100% { stroke-opacity:.75; }
+  50%      { stroke-opacity:1;  filter:drop-shadow(0 0 8px var(--aoe-glow)); }
+}
+.aoe-preview { fill-opacity:0.08; stroke-width:2; stroke-dasharray:8 4; stroke-opacity:.6; }
+
+/* ── PING LAYER (inside canvas) ── */
+#ping-layer {
+  position:absolute; inset:0; width:100%; height:100%;
+  pointer-events:none; z-index:24; overflow:visible;
+}
+
+/* ── ZONE SWAP DROP TARGETS ── */
+#upper-zone.drop-target, #lower-zone.drop-target { outline:2px dashed var(--gold-dim); outline-offset:-4px; }
+
 </style>
 </head>
 <body>
@@ -414,6 +476,15 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
     <div id="lower-zone"></div>
     <div id="combat-arena"></div>
     <svg id="measure-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <svg id="ping-layer"  xmlns="http://www.w3.org/2000/svg"></svg>
+    <svg id="aoe-layer"   xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="aoe-glow-filter" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+    </svg>
   </div>
 </div>
 
@@ -449,15 +520,32 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
 <input type="file" id="tp-av-file"       accept="image/*" style="display:none">
 
 <!-- DICE -->
-<div id="dice-row">
-  <button class="die-btn" data-sides="4"   title="d4">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,5 56,52 4,52"              class="die-poly"/><line x1="30" y1="5" x2="30" y2="52" class="die-inner-line"/><text x="30" y="42" class="die-label">d4</text></svg></button>
-  <button class="die-btn" data-sides="6"   title="d6">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><rect x="7" y="7" width="46" height="46" rx="6"  class="die-poly-rect"/><text x="30" y="33" class="die-label">d6</text></svg></button>
-  <button class="die-btn" data-sides="8"   title="d8">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 56,30 30,56 4,30"          class="die-poly"/><line x1="4" y1="30" x2="56" y2="30" class="die-inner-line"/><line x1="30" y1="4" x2="30" y2="56" class="die-inner-line"/><text x="30" y="33" class="die-label">d8</text></svg></button>
-  <button class="die-btn" data-sides="10"  title="d10"> <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 52,20 46,52 14,52 8,20"    class="die-poly"/><text x="30" y="35" class="die-label">d10</text></svg></button>
-  <button class="die-btn" data-sides="12"  title="d12"> <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 50,14 57,36 42,54 18,54 3,36 10,14" class="die-poly"/><text x="30" y="35" class="die-label">d12</text></svg></button>
-  <button class="die-btn" data-sides="20"  title="d20"> <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 54,17 54,43 30,56 6,43 6,17" class="die-poly"/><line x1="6" y1="17" x2="54" y2="17" class="die-inner-line"/><line x1="6" y1="43" x2="54" y2="43" class="die-inner-line"/><text x="30" y="35" class="die-label">d20</text></svg></button>
-  <button class="die-btn" data-sides="100" title="d100"><span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 52,20 46,52 14,52 8,20"    class="die-poly"/><text x="30" y="35" class="die-label" style="font-size:9px">d100</text></svg></button>
-  <div id="dice-palette-btn" title="Dice Colour"></div>
+<div id="bottom-bar">
+  <!-- AoE shapes toolbar (combat mode only) -->
+  <div id="aoe-toolbar">
+    <button class="aoe-shape-btn" data-shape="circle" title="Circle">◯</button>
+    <button class="aoe-shape-btn" data-shape="cone"   title="Cone">△</button>
+    <button class="aoe-shape-btn" data-shape="line"   title="Line">━</button>
+    <button class="aoe-shape-btn" data-shape="square" title="Square">□</button>
+    <div class="aoe-divider"></div>
+    <div class="aoe-color-btn active" data-acolor="#1a6fff" style="background:#1a6fff" title="Blue"></div>
+    <div class="aoe-color-btn"        data-acolor="#dc1414" style="background:#dc1414" title="Red"></div>
+    <div class="aoe-color-btn"        data-acolor="#14b414" style="background:#14b414" title="Green"></div>
+    <div class="aoe-color-btn"        data-acolor="#c8a96e" style="background:#c8a96e" title="Gold"></div>
+    <div class="aoe-divider"></div>
+    <button id="aoe-clear" title="Clear all shapes">✕</button>
+  </div>
+
+  <div id="dice-row">
+    <button class="die-btn" data-sides="4"   title="d4">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,5 56,52 4,52"              class="die-poly"/><line x1="30" y1="5" x2="30" y2="52" class="die-inner-line"/><text x="30" y="42" class="die-label">d4</text></svg></button>
+    <button class="die-btn" data-sides="6"   title="d6">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><rect x="7" y="7" width="46" height="46" rx="6"  class="die-poly-rect"/><text x="30" y="33" class="die-label">d6</text></svg></button>
+    <button class="die-btn" data-sides="8"   title="d8">  <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 56,30 30,56 4,30"          class="die-poly"/><line x1="4" y1="30" x2="56" y2="30" class="die-inner-line"/><line x1="30" y1="4" x2="30" y2="56" class="die-inner-line"/><text x="30" y="33" class="die-label">d8</text></svg></button>
+    <button class="die-btn" data-sides="10"  title="d10"> <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 52,20 46,52 14,52 8,20"    class="die-poly"/><text x="30" y="35" class="die-label">d10</text></svg></button>
+    <button class="die-btn" data-sides="12"  title="d12"> <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 50,14 57,36 42,54 18,54 3,36 10,14" class="die-poly"/><text x="30" y="35" class="die-label">d12</text></svg></button>
+    <button class="die-btn" data-sides="20"  title="d20"> <span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="30,4 54,17 54,43 30,56 6,43 6,17" class="die-poly"/><line x1="6" y1="17" x2="54" y2="17" class="die-inner-line"/><line x1="6" y1="43" x2="54" y2="43" class="die-inner-line"/><text x="30" y="35" class="die-label">d20</text></svg></button>
+    <button class="die-btn" data-sides="100" title="d100"><span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="52,21 39,8 21,8 8,21 8,39 21,52 39,52 52,39" class="die-poly"/><text x="30" y="34" class="die-label" style="font-size:9px">d100</text></svg></button>
+    <div id="dice-palette-btn" title="Dice Colour"></div>
+  </div>
 </div>
 <div id="dice-palette-popup"></div>
 <div id="dice-log"></div>
@@ -541,14 +629,15 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = {
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:null,
+  combatMode:false, weather:null, aoeShapes:[],
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
 
 // ── SESSION ──────────────────────────────────────────────────────
 let isHost=false, isDiscord=false, roomCode=null;
 let myPeer=null, hostConn=null, guestConns=[];
-let dragAsset=null, cDrag=null;
+let dragAsset=null, cDrag=null, zoneSwapDrag=null;
+let aoeActive=null, aoeColor='#1a6fff', aoeDragStart=null;
 
 // ── UTIL ─────────────────────────────────────────────────────────
 const uid   = () => Math.random().toString(36).slice(2,9);
@@ -679,7 +768,10 @@ function handleMsg(msg,fromConn) {
     }
     case 'show_handout':    showHandout(msg.url); if(isHost) broadcast(msg,fromConn); break;
     case 'dismiss_handout': dismissHandout(); if(isHost) broadcast(msg,fromConn); break;
-    case 'blood_splat':
+    case 'ping':       if(window.spawnPing) window.spawnPing(msg.cx,msg.cy); if(isHost) broadcast(msg,fromConn); break;
+    case 'add_aoe':    S.aoeShapes.push(msg.shape); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
+    case 'remove_aoe': S.aoeShapes=S.aoeShapes.filter(s=>s.id!==msg.id); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
+    case 'clear_aoe':  S.aoeShapes=[]; renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
       if(window.spawnBloodAt) window.spawnBloodAt(msg.cx,msg.cy);
       if(isHost) broadcast(msg,fromConn);
       break;
@@ -697,7 +789,7 @@ function syncCombatState() {
   el('combat-arena').innerHTML='';
   if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 }
-function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); if(window.applyWeather) window.applyWeather(S.weather); }
+function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); if(window.applyWeather) window.applyWeather(S.weather); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
@@ -707,14 +799,24 @@ function renderDmAvatar() {
 
 function makeAvatarEl(obj,removeType) {
   const wrap=document.createElement('div'); wrap.className='av-wrap';
+  const entityType=removeType==='remove_player'?'player':'npc';
   const frame=document.createElement('div'); frame.className='av-frame';
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
-  frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
+  frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}" draggable="false">`:`<div class="av-placeholder">👤</div>`;
   const lbl=document.createElement('div'); lbl.className='av-label'; lbl.textContent=obj.name||'';
   wrap.appendChild(frame); wrap.appendChild(lbl);
   if(isHost) {
-    frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e, removeType==='remove_player'?'player':'npc', obj.id, frame));
+    // Zone-swap drag
+    wrap.draggable=true;
+    wrap.addEventListener('dragstart',e=>{
+      zoneSwapDrag={id:obj.id,entityType,obj};
+      e.dataTransfer.setData('text/plain','zone-swap');
+      e.dataTransfer.effectAllowed='move';
+      e.stopPropagation();
+    });
+    wrap.addEventListener('dragend',()=>{ zoneSwapDrag=null; });
+    frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
     frame.addEventListener('dblclick',e=>{ e.preventDefault(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
   }
   return wrap;
@@ -1005,6 +1107,96 @@ function addLogEntry(sides,rolls,total,mode,mod,name) {
   showDicePopup(sides,rolls,total,mode,mod,name);
 }
 
+// ── PING ─────────────────────────────────────────────────────────
+window.spawnPing = function(cx,cy) {
+  const svg=el('ping-layer'); if(!svg) return;
+  [0,350].forEach(delayMs=>{
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r','4');
+    c.setAttribute('fill','none');c.setAttribute('stroke','#c8a96e');c.setAttribute('stroke-width','3');
+    svg.appendChild(c);
+    let t0=null;
+    const dur=1100,maxR=70;
+    function frame(ts){
+      if(!t0) t0=ts+delayMs;
+      const p=(ts-t0)/dur;
+      if(p<0){requestAnimationFrame(frame);return;}
+      if(p>=1){try{svg.removeChild(c);}catch{}return;}
+      c.setAttribute('r',4+(maxR-4)*p);
+      c.setAttribute('stroke-opacity',1-p);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+};
+
+// ── AOE LAYER ────────────────────────────────────────────────────
+const NS='http://www.w3.org/2000/svg';
+
+function aoeShapePath(shape) {
+  const {type,x1,y1,x2,y2}=shape;
+  if(type==='circle'){
+    const r=Math.hypot(x2-x1,y2-y1),e_=document.createElementNS(NS,'circle');
+    e_.setAttribute('cx',x1);e_.setAttribute('cy',y1);e_.setAttribute('r',r); return e_;
+  }
+  if(type==='line'){
+    const e_=document.createElementNS(NS,'line');
+    e_.setAttribute('x1',x1);e_.setAttribute('y1',y1);e_.setAttribute('x2',x2);e_.setAttribute('y2',y2); return e_;
+  }
+  if(type==='square'){
+    const e_=document.createElementNS(NS,'rect');
+    e_.setAttribute('x',Math.min(x1,x2));e_.setAttribute('y',Math.min(y1,y2));
+    e_.setAttribute('width',Math.abs(x2-x1));e_.setAttribute('height',Math.abs(y2-y1)); return e_;
+  }
+  if(type==='cone'){
+    const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);
+    if(len<4) return null;
+    const theta=Math.atan2(dy,dx),ha=0.4625;
+    const lx=x1+len*Math.cos(theta-ha),ly=y1+len*Math.sin(theta-ha);
+    const rx=x1+len*Math.cos(theta+ha),ry_=y1+len*Math.sin(theta+ha);
+    const e_=document.createElementNS(NS,'path');
+    e_.setAttribute('d',`M${x1} ${y1} L${lx} ${ly} A${len} ${len} 0 0 1 ${rx} ${ry_} Z`); return e_;
+  }
+  return null;
+}
+
+function styleAoeEl(e_,color,preview){
+  e_.setAttribute('stroke',color); e_.setAttribute('fill',color);
+  e_.setAttribute('fill-opacity',preview?'0.06':'0.12');
+  e_.setAttribute('stroke-width',preview?'2':'2.5');
+  if(!preview){ e_.classList.add('aoe-shape'); e_.setAttribute('filter','url(#aoe-glow-filter)'); }
+  else e_.classList.add('aoe-preview');
+  return e_;
+}
+
+function renderAoeLayer() {
+  const svg=el('aoe-layer'); if(!svg) return;
+  [...svg.children].forEach(c=>{ if(c.tagName!=='defs') svg.removeChild(c); });
+  S.aoeShapes.forEach(shape=>{
+    const path=aoeShapePath(shape); if(!path) return;
+    styleAoeEl(path,shape.color,false);
+    path.dataset.aoeId=shape.id;
+    if(isHost){
+      path.style.pointerEvents='all';
+      path.addEventListener('contextmenu',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'remove_aoe',id:shape.id}); });
+    }
+    svg.appendChild(path);
+  });
+}
+
+function aoeDistLabel(svg,x1,y1,x2,y2){
+  const old=svg.getElementById('aoe-dist-label'); if(old) old.parentNode.removeChild(old);
+  const dist=Math.round(Math.hypot(x2-x1,y2-y1)/CELL*5); if(!dist) return;
+  const g=document.createElementNS(NS,'g'); g.id='aoe-dist-label';
+  const mx=(x1+x2)/2,my=(y1+y2)/2;
+  const bg=document.createElementNS(NS,'rect');
+  bg.setAttribute('x',mx-32);bg.setAttribute('y',my-13);bg.setAttribute('width','64');bg.setAttribute('height','22');bg.setAttribute('rx','4');bg.setAttribute('fill','rgba(0,0,0,0.78)');
+  const txt=document.createElementNS(NS,'text');
+  txt.setAttribute('x',mx);txt.setAttribute('y',my+6);txt.setAttribute('text-anchor','middle');
+  txt.setAttribute('font-family','Cinzel,serif');txt.setAttribute('font-size','13');txt.setAttribute('font-weight','700');txt.setAttribute('fill','#c8a96e');txt.textContent=`${dist} ft`;
+  g.appendChild(bg);g.appendChild(txt); svg.appendChild(g);
+}
+
 // ── WEATHER ───────────────────────────────────────────────────────
 const WEATHER_OPTIONS = [
   {id:null,        label:'Clear',     emoji:'⭕'},
@@ -1191,6 +1383,87 @@ function scheduleFlip() {
   el('btn-screen').addEventListener('click',()=>{ const open=el('dm-screen').classList.toggle('open'); document.body.classList.toggle('panel-open',open); });
   el('btn-close-screen').addEventListener('click',()=>{ el('dm-screen').classList.remove('open'); document.body.classList.remove('panel-open'); });
   el('btn-combat').addEventListener('click',()=>{ if(isHost) send({type:'set_combat',active:!S.combatMode}); });
+
+  // ── ZONE SWAP (drag player ↔ npc between rows) ──────────────────
+  ['upper-zone','lower-zone'].forEach(zid=>{
+    const zone=el(zid);
+    zone.addEventListener('dragover',e=>{
+      if(!zoneSwapDrag||!isHost) return;
+      e.preventDefault(); e.dataTransfer.dropEffect='move';
+      zone.classList.add('drop-target');
+    });
+    zone.addEventListener('dragleave',()=>zone.classList.remove('drop-target'));
+    zone.addEventListener('drop',e=>{
+      zone.classList.remove('drop-target');
+      if(!zoneSwapDrag||!isHost) return;
+      e.preventDefault();
+      const {id,entityType,obj}=zoneSwapDrag; zoneSwapDrag=null;
+      if(zid==='upper-zone'&&entityType==='player'){
+        send({type:'remove_player',id});
+        send({type:'add_npc', npc:{...obj,cx:null,cy:null,flipped:obj.flipped||false}});
+      } else if(zid==='lower-zone'&&entityType==='npc'){
+        send({type:'remove_npc',id});
+        send({type:'add_player', player:{...obj,cx:null,cy:null,flipped:obj.flipped||false}});
+      }
+    });
+  });
+
+  // ── PING — middle mouse ─────────────────────────────────────────
+  el('canvas').addEventListener('mousedown',e=>{
+    if(e.button!==1||!isHost) return;
+    e.preventDefault();
+    const {x,y}=toCanvas(e);
+    send({type:'ping',cx:x,cy:y});
+  });
+
+  // ── AOE SHAPES ─────────────────────────────────────────────────
+  let aoePreviewEl=null;
+  const aoeSvg=el('aoe-layer');
+
+  document.querySelectorAll('.aoe-shape-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const s=btn.dataset.shape;
+      aoeActive=(aoeActive===s)?null:s;
+      document.querySelectorAll('.aoe-shape-btn').forEach(b=>b.classList.toggle('active',b.dataset.shape===aoeActive));
+      el('canvas').style.cursor=aoeActive?'crosshair':'';
+    });
+  });
+  document.querySelectorAll('.aoe-color-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      aoeColor=btn.dataset.acolor;
+      document.querySelectorAll('.aoe-color-btn').forEach(b=>b.classList.toggle('active',b.dataset.acolor===aoeColor));
+    });
+  });
+  el('aoe-clear').addEventListener('click',()=>{ if(isHost) send({type:'clear_aoe'}); });
+
+  // AoE drawing on canvas
+  el('canvas').addEventListener('mousedown',e=>{
+    if(e.button!==0||!aoeActive||!isHost||!S.combatMode) return;
+    e.preventDefault(); e.stopPropagation();
+    aoeDragStart=toCanvas(e);
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!aoeDragStart||!aoeActive) return;
+    const {x,y}=toCanvas(e);
+    // Remove old preview
+    if(aoePreviewEl&&aoePreviewEl.parentNode) aoePreviewEl.parentNode.removeChild(aoePreviewEl);
+    const shape={type:aoeActive,color:aoeColor,x1:aoeDragStart.x,y1:aoeDragStart.y,x2:x,y2:y,id:'preview'};
+    aoePreviewEl=aoeShapePath(shape);
+    if(aoePreviewEl){ styleAoeEl(aoePreviewEl,aoeColor,true); aoeSvg.appendChild(aoePreviewEl); aoeDistLabel(aoeSvg,aoeDragStart.x,aoeDragStart.y,x,y); }
+  });
+  document.addEventListener('mouseup',e=>{
+    if(!aoeDragStart||!aoeActive||e.button!==0) return;
+    // Remove preview and dist label
+    if(aoePreviewEl&&aoePreviewEl.parentNode) aoePreviewEl.parentNode.removeChild(aoePreviewEl);
+    aoePreviewEl=null;
+    const old=aoeSvg.getElementById('aoe-dist-label'); if(old) old.parentNode.removeChild(old);
+    const {x,y}=toCanvas(e);
+    if(Math.hypot(x-aoeDragStart.x,y-aoeDragStart.y)>8){
+      const shape={id:uid(),type:aoeActive,color:aoeColor,x1:aoeDragStart.x,y1:aoeDragStart.y,x2:x,y2:y};
+      send({type:'add_aoe',shape});
+    }
+    aoeDragStart=null;
+  });
 
   // Weather button & menu (host only)
   initWeatherCanvas();
