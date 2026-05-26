@@ -192,11 +192,11 @@ body.panel-open #toolbar { right:294px; }
 #av-cancel { background:rgba(20,12,4,.7); border:1px solid var(--border); color:var(--text-dim); }
 
 /* ── HANDOUT ── */
-#handout-overlay { position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:50; display:none; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+#handout-overlay { position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:500; display:none; align-items:center; justify-content:center; cursor:pointer; }
 #handout-overlay.visible { display:flex; }
-#handout-box { position:relative; max-width:72vw; max-height:82vh; border:2px solid var(--gold-dim); border-radius:8px; overflow:hidden; box-shadow:0 0 60px rgba(0,0,0,.8); animation:pop-in .3s cubic-bezier(.34,1.56,.64,1) both; }
-#handout-box img { display:block; max-width:72vw; max-height:82vh; object-fit:contain; }
-#handout-close { position:absolute; top:8px; right:8px; background:rgba(0,0,0,.7); border:1px solid #555; color:#ccc; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; }
+#handout-box { position:relative; max-width:72vw; max-height:82vh; border:2px solid var(--gold-dim); border-radius:8px; overflow:hidden; box-shadow:0 0 60px rgba(0,0,0,.8); animation:pop-in .3s cubic-bezier(.34,1.56,.64,1) both; cursor:default; pointer-events:all; }
+#handout-box img { display:block; max-width:72vw; max-height:82vh; object-fit:contain; pointer-events:none; }
+#handout-close { position:absolute; top:8px; right:8px; background:rgba(0,0,0,.7); border:1px solid #555; color:#ccc; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; pointer-events:all; }
 #handout-close:hover { background:rgba(139,0,0,.6); }
 
 /* ── DICE ROW ── */
@@ -889,8 +889,14 @@ document.addEventListener('mouseup',e=>{
 });
 
 // ── HANDOUT ──────────────────────────────────────────────────────
-function showHandout(url)  { el('handout-img').src=url; el('handout-overlay').classList.add('visible'); }
-function dismissHandout()  { el('handout-overlay').classList.remove('visible'); el('handout-img').removeAttribute('src'); }
+function showHandout(url) {
+  el('handout-img').src=url;
+  el('handout-overlay').style.display='flex';
+}
+function dismissHandout() {
+  el('handout-overlay').style.display='none';
+  el('handout-img').removeAttribute('src');
+}
 
 // ── LIBRARIES ────────────────────────────────────────────────────
 function renderLibraries() {
@@ -1197,8 +1203,12 @@ function scheduleFlip() {
   });
 
   // Handout
-  el('handout-overlay').addEventListener('click',e=>{ if(e.target===el('handout-overlay')){ e.stopPropagation(); send({type:'dismiss_handout'}); } });
-  el('handout-close').addEventListener('click',e=>{ e.stopPropagation(); send({type:'dismiss_handout'}); });
+  // Handout — click background or close button to dismiss; Escape key also works
+  el('handout-overlay').addEventListener('click', e=>{
+    if(e.target === el('handout-overlay')) { e.stopPropagation(); send({type:'dismiss_handout'}); }
+  });
+  el('handout-close').addEventListener('click', e=>{ e.stopPropagation(); send({type:'dismiss_handout'}); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('handout-overlay').style.display==='flex') send({type:'dismiss_handout'}); });
 
   // DM Screen uploads
   document.querySelectorAll('.upload-btn').forEach(btn=>btn.addEventListener('click',()=>el('upload-'+btn.dataset.cat).click()));
@@ -1404,10 +1414,15 @@ function scheduleFlip() {
 
   // Save / Load
   el('tp-save').addEventListener('click',()=>{
-    const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='doomtheatre-save.json'; a.click();
-    URL.revokeObjectURL(url);
+    try {
+      // Replacer: convert NaN/Infinity → 0, undefined → null (both invalid in JSON)
+      const safe = (k,v) => { if(typeof v==='number' && !isFinite(v)) return 0; return v; };
+      const jsonStr = JSON.stringify(S, safe, 2);
+      const blob=new Blob([jsonStr],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='doomtheatre-save.json'; a.click();
+      URL.revokeObjectURL(url);
+    } catch(err){ alert('Save failed: '+err.message); }
   });
   el('tp-load-btn').addEventListener('click',()=>el('tp-load-file').click());
   el('tp-load-file').addEventListener('change',async e=>{
