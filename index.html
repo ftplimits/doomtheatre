@@ -874,7 +874,12 @@ function makeCombatAv(obj, entityType, idx) {
 
   wrap.appendChild(frame);
   if(isHost){
-    frame.addEventListener('mousedown',e=>{ if(e.button!==0) return; e.preventDefault(); combatDragStart(e,wrap,entityType,obj); });
+    frame.addEventListener('mousedown',e=>{
+      if(e.button!==0) return;
+      e.preventDefault();
+      if(aoeActive) return; // let AoE canvas listener handle it via bubble
+      combatDragStart(e,wrap,entityType,obj);
+    });
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
     frame.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
   }
@@ -1456,14 +1461,13 @@ function scheduleFlip() {
   });
   el('aoe-clear').addEventListener('click',()=>{ if(isHost) send({type:'clear_aoe'}); });
 
-  // AoE drawing on canvas — capture phase intercepts clicks on tokens too
+  // AoE drawing on canvas (bubble phase is fine — ca-frame handler checks aoeActive)
   el('canvas').addEventListener('mousedown',e=>{
     if(e.button!==0||!aoeActive||!isHost||!S.combatMode) return;
     e.preventDefault();
-    e.stopPropagation(); // prevent token drag starting
     const raw=toCanvas(e);
     aoeDragStart=snapAoeXY(raw.x,raw.y);
-  }, {capture:true});
+  });
   document.addEventListener('mousemove',e=>{
     if(!aoeDragStart||!aoeActive) return;
     const raw=toCanvas(e); const {x,y}=snapAoeXY(raw.x,raw.y);
