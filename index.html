@@ -1598,22 +1598,30 @@ function scheduleFlip() {
 
   // Pencil canvas drawing
   const pc=el('pencil-canvas');
-  pc.addEventListener('mousedown',e=>{
-    if(!document.body.classList.contains('draw-mode')||!isHost) return;
+  pc.addEventListener('pointerdown',e=>{
+    if(e.button!==0||!document.body.classList.contains('draw-mode')||!isHost) return;
+    e.preventDefault();
+    pc.setPointerCapture(e.pointerId); // route ALL pointer events to pc for this stroke
     drawPainting=true;
     const {x,y}=toCanvas(e); drawLastX=x; drawLastY=y;
     _drawSeg({x1:x,y1:y,x2:x,y2:y,color:drawColor,size:drawSize});
   });
-  // mousemove on document so strokes track reliably even at speed
-  document.addEventListener('mousemove',e=>{
-    if(!drawPainting||!document.body.classList.contains('draw-mode')) return;
+  pc.addEventListener('pointermove',e=>{
+    if(!drawPainting) return;
     const {x,y}=toCanvas(e);
     if(x===drawLastX&&y===drawLastY) return;
     const seg={x1:drawLastX,y1:drawLastY,x2:x,y2:y,color:drawColor,size:drawSize};
     send({type:'draw_segment',...seg});
     drawLastX=x; drawLastY=y;
   });
-  document.addEventListener('mouseup',()=>{ drawPainting=false; });
+  pc.addEventListener('pointerup',   ()=>{ drawPainting=false; });
+  pc.addEventListener('pointercancel',()=>{ drawPainting=false; });
+  // Right-click in draw mode clears the canvas
+  pc.addEventListener('contextmenu',e=>{
+    if(!document.body.classList.contains('draw-mode')||!isHost) return;
+    e.preventDefault(); e.stopPropagation();
+    send({type:'clear_draw'});
+  });
 
 
   ['upper-zone','lower-zone'].forEach(zid=>{
