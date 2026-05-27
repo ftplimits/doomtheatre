@@ -436,7 +436,69 @@ body.browser-mode #aoe-toolbar { right:calc(50% + 165px); }
 #aoe-clear:hover { color:#f88; border-color:#f88; }
 .aoe-divider { width:1px; height:28px; background:var(--border); flex-shrink:0; }
 
-/* ── AOE LAYER (inside canvas) ── */
+/* ── PENCIL DRAW CANVAS ── */
+#pencil-canvas {
+  position:absolute; inset:0; width:1920px; height:1080px;
+  pointer-events:none; z-index:23;
+}
+body.draw-mode #pencil-canvas { pointer-events:all; cursor:crosshair; }
+
+/* ── DRAW MENU ── */
+#draw-menu {
+  position:fixed; z-index:35; display:none;
+  background:var(--panel-bg); border:1px solid var(--border);
+  border-radius:8px; padding:8px 10px;
+  box-shadow:0 4px 20px rgba(0,0,0,.85); min-width:130px;
+}
+#draw-menu.open { display:block; }
+.dm-label { font-family:'Cinzel',serif; font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin:4px 0 3px; }
+.dm-row { display:flex; gap:5px; align-items:center; margin-bottom:5px; }
+.dm-color {
+  width:22px; height:22px; border-radius:3px; cursor:pointer;
+  border:2px solid transparent; transition:border-color .15s, transform .15s;
+}
+.dm-color:hover { transform:scale(1.15); }
+.dm-color.active { border-color:#fff; }
+.dm-size {
+  font-family:'Cinzel',serif; font-size:9px; padding:2px 7px;
+  background:none; border:1px solid var(--border); border-radius:3px;
+  color:var(--text-dim); cursor:pointer; transition:color .12s,border-color .12s;
+}
+.dm-size:hover  { color:var(--gold); border-color:var(--gold-dim); }
+.dm-size.active { color:var(--gold); border-color:var(--gold); }
+#dm-clear-btn {
+  width:100%; background:none; border:1px solid var(--border); border-radius:4px;
+  color:var(--text-dim); font-size:10px; padding:3px; cursor:pointer; margin-top:2px;
+}
+#dm-clear-btn:hover { color:#f88; border-color:#f88; }
+body.panel-open #draw-menu { right:294px; }
+
+/* ── AVATAR ICON OVERLAY ── */
+.av-icon-overlay {
+  position:absolute; bottom:3px; right:3px;
+  font-size:18px; line-height:1; pointer-events:none;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,0.9));
+}
+
+/* ── CTX-MENU extras ── */
+.ctx-sep  { height:1px; background:var(--border); margin:3px 0; }
+.ctx-mini { font-family:'Cinzel',serif; font-size:7px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); padding:4px 14px 1px; }
+.ctx-swatch-row { display:flex; gap:4px; padding:3px 14px 5px; flex-wrap:wrap; }
+.ctx-swatch {
+  width:18px; height:18px; border-radius:3px; cursor:pointer;
+  border:2px solid transparent; transition:border-color .12s, transform .12s;
+}
+.ctx-swatch:hover { transform:scale(1.2); }
+.ctx-swatch.active { border-color:#fff; }
+.ctx-icon-row { display:flex; gap:3px; padding:3px 14px 5px; flex-wrap:wrap; max-width:180px; }
+.ctx-icon-btn {
+  font-size:16px; cursor:pointer; line-height:1; padding:1px;
+  border-radius:3px; transition:background .12s;
+}
+.ctx-icon-btn:hover { background:rgba(255,255,255,.15); }
+.ctx-icon-btn.active { background:rgba(200,169,110,.3); outline:1px solid var(--gold-dim); }
+
+
 #aoe-layer {
   position:absolute; inset:0; width:100%; height:100%;
   pointer-events:none; z-index:22; display:none; overflow:visible;
@@ -480,6 +542,7 @@ body.combat #aoe-layer { display:block; }
     <div id="combat-arena"></div>
     <svg id="measure-svg" xmlns="http://www.w3.org/2000/svg"></svg>
     <svg id="ping-layer"  xmlns="http://www.w3.org/2000/svg"></svg>
+    <canvas id="pencil-canvas" width="1920" height="1080"></canvas>
     <svg id="aoe-layer"   xmlns="http://www.w3.org/2000/svg">
       <defs>
         <filter id="aoe-glow-filter" x="-50%" y="-50%" width="200%" height="200%">
@@ -508,7 +571,12 @@ body.combat #aoe-layer { display:block; }
 <!-- CONTEXT MENU -->
 <div id="ctx-menu">
   <div class="ctx-item" id="ctx-kill">⚔ Kill</div>
-  <div class="ctx-item" id="ctx-rename-dm">✏ Rename</div>
+  <div class="ctx-item" id="ctx-rename-dm" style="display:none">✏ Rename</div>
+  <div class="ctx-sep"  id="ctx-style-sep"></div>
+  <div class="ctx-mini">Border</div>
+  <div class="ctx-swatch-row" id="ctx-border-row"></div>
+  <div class="ctx-mini">Status Icon</div>
+  <div class="ctx-icon-row"   id="ctx-icon-row"></div>
 </div>
 
 <!-- TRANSITION OVERLAY -->
@@ -557,10 +625,27 @@ body.combat #aoe-layer { display:block; }
 <canvas id="weather-canvas"></canvas>
 <div id="weather-menu"></div>
 
-<!-- TOOLBAR -->
+<!-- DRAW MENU -->
+<div id="draw-menu">
+  <div class="dm-label">Color</div>
+  <div class="dm-row">
+    <div class="dm-color active" data-dcolor="#111111" style="background:#111;outline:1px solid #555" title="Black"></div>
+    <div class="dm-color"        data-dcolor="#ffffff" style="background:#fff" title="White"></div>
+  </div>
+  <div class="dm-label">Size</div>
+  <div class="dm-row">
+    <button class="dm-size active" data-dsize="4">S</button>
+    <button class="dm-size"        data-dsize="12">M</button>
+    <button class="dm-size"        data-dsize="24">L</button>
+  </div>
+  <button id="dm-clear-btn">🗑 Clear</button>
+</div>
+
+<!-- TOOLBAR: combat leftmost, screen rightmost -->
 <div id="toolbar">
   <button class="tbtn" id="btn-combat"  title="Combat Mode">⚔️</button>
   <button class="tbtn" id="btn-weather" title="Weather">🌦</button>
+  <button class="tbtn" id="btn-draw"    title="Draw Tool">✏️</button>
   <button class="tbtn" id="btn-screen"  title="DM Screen">🗂</button>
 </div>
 
@@ -632,7 +717,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = {
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:null, aoeShapes:[],
+  combatMode:false, weather:null, aoeShapes:[], drawStrokes:[],
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
 
@@ -775,9 +860,30 @@ function handleMsg(msg,fromConn) {
     case 'add_aoe':    S.aoeShapes.push(msg.shape); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'remove_aoe': S.aoeShapes=S.aoeShapes.filter(s=>s.id!==msg.id); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'clear_aoe':  S.aoeShapes=[]; renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
+    case 'blood_splat':
       if(window.spawnBloodAt) window.spawnBloodAt(msg.cx,msg.cy);
       if(isHost) broadcast(msg,fromConn);
       break;
+    case 'draw_segment':
+      S.drawStrokes.push(msg); if(window.drawSegment) window.drawSegment(msg);
+      if(isHost) broadcast(msg,fromConn); break;
+    case 'clear_draw':
+      S.drawStrokes=[]; if(window.clearDraw) window.clearDraw();
+      if(isHost) broadcast(msg,fromConn); break;
+    case 'set_avatar_style': {
+      const arr=msg.entityType==='player'?S.players:S.npcs;
+      const obj=arr.find(o=>o.id===msg.id);
+      if(obj){ if('borderColor' in msg) obj.borderColor=msg.borderColor; if('icon' in msg) obj.icon=msg.icon; }
+      // Re-apply to all matching DOM frames
+      document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
+        if('borderColor' in msg) frame.style.borderColor=msg.borderColor||'';
+        if('icon' in msg){
+          const old=frame.querySelector('.av-icon-overlay'); if(old) old.remove();
+          if(msg.icon){ const ic=document.createElement('div'); ic.className='av-icon-overlay'; ic.textContent=msg.icon; frame.appendChild(ic); }
+        }
+      });
+      if(isHost) broadcast(msg,fromConn); break;
+    }
     case 'set_weather': S.weather=msg.effect; if(window.applyWeather) window.applyWeather(msg.effect); if(isHost) broadcast(msg,fromConn); break;
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
     case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.mod||0,msg.name); if(isHost) broadcast(msg,fromConn); break;
@@ -1222,6 +1328,29 @@ function aoeDistLabel(svg,x1,y1,x2,y2){
   g.appendChild(bg);g.appendChild(txt); svg.appendChild(g);
 }
 
+// ── PENCIL DRAW ───────────────────────────────────────────────────
+let drawCtx=null, drawPainting=false, drawColor='#111111', drawSize=4, drawLastX=0, drawLastY=0;
+
+function initPencilCanvas() {
+  const c=el('pencil-canvas'); drawCtx=c.getContext('2d');
+  drawCtx.lineCap='round'; drawCtx.lineJoin='round';
+}
+function replayDrawStrokes() {
+  if(!drawCtx) return;
+  drawCtx.clearRect(0,0,GRID_W,GRID_H);
+  S.drawStrokes.forEach(seg=>_drawSeg(seg));
+}
+function _drawSeg(seg) {
+  if(!drawCtx) return;
+  drawCtx.beginPath();
+  drawCtx.strokeStyle=seg.color; drawCtx.lineWidth=seg.size;
+  drawCtx.lineCap='round'; drawCtx.lineJoin='round';
+  drawCtx.moveTo(seg.x1,seg.y1); drawCtx.lineTo(seg.x2,seg.y2);
+  drawCtx.stroke();
+}
+window.drawSegment = seg => _drawSeg(seg);
+window.clearDraw   = ()  => { if(drawCtx) drawCtx.clearRect(0,0,GRID_W,GRID_H); };
+
 // ── WEATHER ───────────────────────────────────────────────────────
 const WEATHER_OPTIONS = [
   {id:null,        label:'Clear',     emoji:'⭕'},
@@ -1409,7 +1538,62 @@ function scheduleFlip() {
   el('btn-close-screen').addEventListener('click',()=>{ el('dm-screen').classList.remove('open'); document.body.classList.remove('panel-open'); });
   el('btn-combat').addEventListener('click',()=>{ if(isHost) send({type:'set_combat',active:!S.combatMode}); });
 
-  // ── ZONE SWAP (drag player ↔ npc between rows) ──────────────────
+  // ── PENCIL DRAW TOOL ─────────────────────────────────────────────
+  initPencilCanvas();
+  const drawMenu=el('draw-menu');
+
+  // Draw button toggle
+  el('btn-draw').addEventListener('click',e=>{
+    if(!isHost) return;
+    const active=document.body.classList.toggle('draw-mode');
+    el('btn-draw').classList.toggle('active',active);
+    drawMenu.classList.toggle('open',active);
+    if(active){
+      const r=el('btn-draw').getBoundingClientRect();
+      drawMenu.style.top=(r.bottom+6)+'px';
+      drawMenu.style.right=(window.innerWidth-r.right)+'px';
+    }
+    e.stopPropagation();
+  });
+  document.addEventListener('click',e=>{
+    if(!el('draw-menu').contains(e.target)&&e.target!==el('btn-draw'))
+      drawMenu.classList.remove('open');
+  });
+
+  // Draw color buttons
+  document.querySelectorAll('.dm-color').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      drawColor=btn.dataset.dcolor;
+      document.querySelectorAll('.dm-color').forEach(b=>b.classList.toggle('active',b.dataset.dcolor===drawColor));
+    });
+  });
+  // Draw size buttons
+  document.querySelectorAll('.dm-size').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      drawSize=parseInt(btn.dataset.dsize);
+      document.querySelectorAll('.dm-size').forEach(b=>b.classList.toggle('active',b.dataset.dsize===btn.dataset.dsize));
+    });
+  });
+  el('dm-clear-btn').addEventListener('click',()=>{ if(isHost) send({type:'clear_draw'}); });
+
+  // Pencil canvas drawing
+  const pc=el('pencil-canvas');
+  pc.addEventListener('mousedown',e=>{
+    if(!document.body.classList.contains('draw-mode')||!isHost) return;
+    drawPainting=true;
+    const {x,y}=toCanvas(e); drawLastX=x; drawLastY=y;
+    _drawSeg({x1:x,y1:y,x2:x,y2:y,color:drawColor,size:drawSize});
+  });
+  pc.addEventListener('mousemove',e=>{
+    if(!drawPainting) return;
+    const {x,y}=toCanvas(e);
+    const seg={x1:drawLastX,y1:drawLastY,x2:x,y2:y,color:drawColor,size:drawSize};
+    send({type:'draw_segment',...seg});
+    drawLastX=x; drawLastY=y;
+  });
+  document.addEventListener('mouseup',()=>{ drawPainting=false; });
+
+
   ['upper-zone','lower-zone'].forEach(zid=>{
     const zone=el(zid);
     zone.addEventListener('dragover',e=>{
@@ -1687,22 +1871,27 @@ function scheduleFlip() {
     if(!isHost) return;
     e.preventDefault(); e.stopPropagation();
     ctxTarget = { entityType, id, domEl };
-    el('ctx-kill').style.display='block';
-    el('ctx-rename-dm').style.display='none';
+    const isAvatar = entityType !== 'dm';
+    el('ctx-kill').style.display      = isAvatar ? 'block' : 'none';
+    el('ctx-rename-dm').style.display = isAvatar ? 'none'  : 'block';
+    el('ctx-style-sep').style.display = isAvatar ? 'block' : 'none';
+    document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display=isAvatar?'':'none');
     const menu=el('ctx-menu');
     menu.style.left=e.clientX+'px';
     menu.style.top =e.clientY+'px';
     menu.classList.add('open');
   }
-  // DM avatar right-click → rename only
+  // DM avatar right-click → rename only, no style sections
   el('dm-av-frame').addEventListener('contextmenu',e=>{
     if(!isHost) return;
     e.preventDefault(); e.stopPropagation();
+    ctxTarget={entityType:'dm',id:'__dm__',domEl:null};
     el('ctx-kill').style.display='none';
     el('ctx-rename-dm').style.display='block';
+    el('ctx-style-sep').style.display='none';
+    document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display='none');
     const menu=el('ctx-menu');
-    menu.style.left=e.clientX+'px';
-    menu.style.top =e.clientY+'px';
+    menu.style.left=e.clientX+'px'; menu.style.top=e.clientY+'px';
     menu.classList.add('open');
   });
   document.addEventListener('click',()=>el('ctx-menu').classList.remove('open'));
@@ -1752,7 +1941,64 @@ function scheduleFlip() {
   // Expose globally so message handler + applyCombat can call them
   window.spawnBloodAt = spawnBlood;
   window._clearBlood  = clearBlood;
+  // ── CTX-MENU: border colours and status icons ─────────────────────
+  const BORDER_COLORS = [
+    {color:null,    bg:'transparent', label:'None',   outline:'1px solid #888'},
+    {color:'#dc1414',bg:'#dc1414',   label:'Red'},
+    {color:'#1a6fff',bg:'#1a6fff',   label:'Blue'},
+    {color:'#14b414',bg:'#14b414',   label:'Green'},
+    {color:'#c8a96e',bg:'#c8a96e',   label:'Gold'},
+    {color:'#ffffff',bg:'#ffffff',   label:'White'},
+    {color:'#9b59b6',bg:'#9b59b6',   label:'Purple'},
+  ];
+  const ICONS = ['',  '☠️','💀','🔥','❄️','⚡','🛡️','🩸','👁️','✨'];
+
+  // Build border swatch row
+  const borderRow=el('ctx-border-row');
+  BORDER_COLORS.forEach(bc=>{
+    const s=document.createElement('div'); s.className='ctx-swatch';
+    s.style.background=bc.bg; s.title=bc.label;
+    if(!bc.color) s.style.outline=bc.outline||'1px solid #888';
+    borderRow.appendChild(s);
+    s.addEventListener('click',()=>{
+      if(!ctxTarget||ctxTarget.entityType==='dm') return;
+      send({type:'set_avatar_style',id:ctxTarget.id,entityType:ctxTarget.entityType,borderColor:bc.color});
+      borderRow.querySelectorAll('.ctx-swatch').forEach(x=>x.classList.remove('active'));
+      s.classList.add('active');
+    });
+  });
+
+  // Build icon row
+  const iconRow=el('ctx-icon-row');
+  ICONS.forEach(ic=>{
+    const b=document.createElement('div'); b.className='ctx-icon-btn';
+    b.textContent=ic||'✖'; b.title=ic?ic:'None';
+    iconRow.appendChild(b);
+    b.addEventListener('click',()=>{
+      if(!ctxTarget||ctxTarget.entityType==='dm') return;
+      send({type:'set_avatar_style',id:ctxTarget.id,entityType:ctxTarget.entityType,icon:ic});
+      iconRow.querySelectorAll('.ctx-icon-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+
+  // Update showCtxMenu to highlight current border/icon
+  const _origShowCtx = showCtxMenu;
+  showCtxMenu = function(e, entityType, id, domEl) {
+    _origShowCtx(e, entityType, id, domEl);
+    // Update active swatches to reflect current state
+    if(entityType !== 'dm') {
+      const arr=entityType==='player'?S.players:S.npcs;
+      const obj=arr.find(o=>o.id===id);
+      const curBorder=obj?.borderColor||null;
+      borderRow.querySelectorAll('.ctx-swatch').forEach((s,i)=>s.classList.toggle('active', BORDER_COLORS[i].color===curBorder));
+      const curIcon=obj?.icon||'';
+      iconRow.querySelectorAll('.ctx-icon-btn').forEach((b,i)=>b.classList.toggle('active', ICONS[i]===curIcon));
+    }
+  };
   window._showCtxMenu = showCtxMenu;
+
+
 
   // Save / Load
   el('tp-save').addEventListener('click',()=>{
