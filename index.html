@@ -473,10 +473,14 @@ body.draw-mode #pencil-canvas { pointer-events:all; cursor:crosshair; }
 #dm-clear-btn:hover { color:#f88; border-color:#f88; }
 body.panel-open #draw-menu { right:294px; }
 
-/* ── AVATAR ICON OVERLAY ── */
+/* ── AVATAR ICON OVERLAY — top-right, up to 3, right-to-left ── */
 .av-icon-overlay {
-  position:absolute; bottom:3px; right:3px;
-  font-size:18px; line-height:1; pointer-events:none;
+  position:absolute; top:3px; right:3px;
+  display:flex; flex-direction:row-reverse; gap:1px;
+  pointer-events:none;
+}
+.av-icon-overlay span {
+  font-size:15px; line-height:1;
   filter:drop-shadow(0 1px 2px rgba(0,0,0,0.9));
 }
 
@@ -631,6 +635,7 @@ body.combat #aoe-layer { display:block; }
   <div class="dm-row">
     <div class="dm-color active" data-dcolor="#111111" style="background:#111;outline:1px solid #555" title="Black"></div>
     <div class="dm-color"        data-dcolor="#ffffff" style="background:#fff" title="White"></div>
+    <div class="dm-color"        data-dcolor="#7B3F00" style="background:#7B3F00" title="Brown"></div>
   </div>
   <div class="dm-label">Size</div>
   <div class="dm-row">
@@ -829,9 +834,15 @@ function handleMsg(msg,fromConn) {
     case 'set_dm_name': S.dmName=msg.name; el('dm-label').textContent=msg.name; if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_avatar': S.dmAvatar=msg.url; S.dmName=msg.name||null; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
     case 'add_player':    S.players.push(msg.player); renderLowerZone(); if(isHost) broadcast(msg,fromConn); break;
-    case 'remove_player': S.players=S.players.filter(p=>p.id!==msg.id); renderLowerZone(); if(S.combatMode) renderCombatArena(); if(isHost) broadcast(msg,fromConn); break;
+    case 'remove_player':
+      S.players=S.players.filter(p=>p.id!==msg.id);
+      document.querySelectorAll('[data-av-id="'+msg.id+'"]').forEach(f=>{ const w=f.closest('.av-wrap,.ca-wrap'); if(w) w.remove(); });
+      if(isHost) broadcast(msg,fromConn); break;
     case 'add_npc':       S.npcs.push(msg.npc); renderUpperZone(); if(isHost) broadcast(msg,fromConn); break;
-    case 'remove_npc':    S.npcs=S.npcs.filter(n=>n.id!==msg.id); renderUpperZone(); if(S.combatMode) renderCombatArena(); if(isHost) broadcast(msg,fromConn); break;
+    case 'remove_npc':
+      S.npcs=S.npcs.filter(n=>n.id!==msg.id);
+      document.querySelectorAll('[data-av-id="'+msg.id+'"]').forEach(f=>{ const w=f.closest('.av-wrap,.ca-wrap'); if(w) w.remove(); });
+      if(isHost) broadcast(msg,fromConn); break;
     case 'set_combat':    S.combatMode=msg.active; applyCombat(); if(isHost) broadcast(msg,fromConn); break;
     case 'combat_move': {
       const arr=msg.entityType==='player'?S.players:S.npcs;
@@ -873,13 +884,16 @@ function handleMsg(msg,fromConn) {
     case 'set_avatar_style': {
       const arr=msg.entityType==='player'?S.players:S.npcs;
       const obj=arr.find(o=>o.id===msg.id);
-      if(obj){ if('borderColor' in msg) obj.borderColor=msg.borderColor; if('icon' in msg) obj.icon=msg.icon; }
-      // Re-apply to all matching DOM frames
+      if(obj){ if('borderColor' in msg) obj.borderColor=msg.borderColor; if('icons' in msg) obj.icons=msg.icons; }
       document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
         if('borderColor' in msg) frame.style.borderColor=msg.borderColor||'';
-        if('icon' in msg){
+        if('icons' in msg){
           const old=frame.querySelector('.av-icon-overlay'); if(old) old.remove();
-          if(msg.icon){ const ic=document.createElement('div'); ic.className='av-icon-overlay'; ic.textContent=msg.icon; frame.appendChild(ic); }
+          if(msg.icons&&msg.icons.length>0){
+            const ov=document.createElement('div'); ov.className='av-icon-overlay';
+            msg.icons.forEach(ic=>{ const s=document.createElement('span'); s.textContent=ic; ov.appendChild(s); });
+            frame.appendChild(ov);
+          }
         }
       });
       if(isHost) broadcast(msg,fromConn); break;
@@ -906,6 +920,16 @@ function renderDmAvatar() {
   el('dm-label').textContent=S.dmName||'DM';
 }
 
+function _applyAvatarStyle(frame, obj) {
+  if(obj.borderColor) frame.style.borderColor=obj.borderColor;
+  const existing=frame.querySelector('.av-icon-overlay'); if(existing) existing.remove();
+  if(obj.icons&&obj.icons.length>0){
+    const ov=document.createElement('div'); ov.className='av-icon-overlay';
+    obj.icons.forEach(ic=>{ const s=document.createElement('span'); s.textContent=ic; ov.appendChild(s); });
+    frame.appendChild(ov);
+  }
+}
+
 function makeAvatarEl(obj,removeType) {
   const wrap=document.createElement('div'); wrap.className='av-wrap';
   const entityType=removeType==='remove_player'?'player':'npc';
@@ -913,17 +937,12 @@ function makeAvatarEl(obj,removeType) {
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}" draggable="false">`:`<div class="av-placeholder">👤</div>`;
+  _applyAvatarStyle(frame, obj);
   const lbl=document.createElement('div'); lbl.className='av-label'; lbl.textContent=obj.name||'';
   wrap.appendChild(frame); wrap.appendChild(lbl);
   if(isHost) {
-    // Zone-swap drag
     wrap.draggable=true;
-    wrap.addEventListener('dragstart',e=>{
-      zoneSwapDrag={id:obj.id,entityType,obj};
-      e.dataTransfer.setData('text/plain','zone-swap');
-      e.dataTransfer.effectAllowed='move';
-      e.stopPropagation();
-    });
+    wrap.addEventListener('dragstart',e=>{ zoneSwapDrag={id:obj.id,entityType,obj}; e.dataTransfer.setData('text/plain','zone-swap'); e.dataTransfer.effectAllowed='move'; e.stopPropagation(); });
     wrap.addEventListener('dragend',()=>{ zoneSwapDrag=null; });
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
     frame.addEventListener('dblclick',e=>{ e.preventDefault(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
@@ -977,6 +996,7 @@ function makeCombatAv(obj, entityType, idx) {
     const bar=document.createElement('div'); bar.className='ca-name-bar';
     bar.textContent=obj.name; frame.appendChild(bar);
   }
+  _applyAvatarStyle(frame, obj);
 
   wrap.appendChild(frame);
   if(isHost){
@@ -1584,9 +1604,11 @@ function scheduleFlip() {
     const {x,y}=toCanvas(e); drawLastX=x; drawLastY=y;
     _drawSeg({x1:x,y1:y,x2:x,y2:y,color:drawColor,size:drawSize});
   });
-  pc.addEventListener('mousemove',e=>{
-    if(!drawPainting) return;
+  // mousemove on document so strokes track reliably even at speed
+  document.addEventListener('mousemove',e=>{
+    if(!drawPainting||!document.body.classList.contains('draw-mode')) return;
     const {x,y}=toCanvas(e);
+    if(x===drawLastX&&y===drawLastY) return;
     const seg={x1:drawLastX,y1:drawLastY,x2:x,y2:y,color:drawColor,size:drawSize};
     send({type:'draw_segment',...seg});
     drawLastX=x; drawLastY=y;
@@ -1972,13 +1994,20 @@ function scheduleFlip() {
   const iconRow=el('ctx-icon-row');
   ICONS.forEach(ic=>{
     const b=document.createElement('div'); b.className='ctx-icon-btn';
-    b.textContent=ic||'✖'; b.title=ic?ic:'None';
+    b.textContent=ic||'✖'; b.title=ic?ic:'Clear all';
     iconRow.appendChild(b);
     b.addEventListener('click',()=>{
       if(!ctxTarget||ctxTarget.entityType==='dm') return;
-      send({type:'set_avatar_style',id:ctxTarget.id,entityType:ctxTarget.entityType,icon:ic});
-      iconRow.querySelectorAll('.ctx-icon-btn').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
+      const arr=ctxTarget.entityType==='player'?S.players:S.npcs;
+      const obj=arr.find(o=>o.id===ctxTarget.id);
+      const cur=obj?.icons||[];
+      let next;
+      if(!ic)          { next=[]; }                          // clear all
+      else if(cur.includes(ic)) { next=cur.filter(x=>x!==ic); } // toggle off
+      else if(cur.length<3)     { next=[...cur,ic]; }            // add (max 3)
+      else return;                                               // at limit
+      send({type:'set_avatar_style',id:ctxTarget.id,entityType:ctxTarget.entityType,icons:next});
+      iconRow.querySelectorAll('.ctx-icon-btn').forEach((b2,i)=>b2.classList.toggle('active', ICONS[i]&&next.includes(ICONS[i])));
     });
   });
 
@@ -1992,8 +2021,8 @@ function scheduleFlip() {
       const obj=arr.find(o=>o.id===id);
       const curBorder=obj?.borderColor||null;
       borderRow.querySelectorAll('.ctx-swatch').forEach((s,i)=>s.classList.toggle('active', BORDER_COLORS[i].color===curBorder));
-      const curIcon=obj?.icon||'';
-      iconRow.querySelectorAll('.ctx-icon-btn').forEach((b,i)=>b.classList.toggle('active', ICONS[i]===curIcon));
+      const curIcons=obj?.icons||[];
+      iconRow.querySelectorAll('.ctx-icon-btn').forEach((b,i)=>b.classList.toggle('active', !!ICONS[i]&&curIcons.includes(ICONS[i])));
     }
   };
   window._showCtxMenu = showCtxMenu;
