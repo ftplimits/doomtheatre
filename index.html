@@ -812,7 +812,7 @@ function fileBaseName(f) { return f.name.replace(/\.[^.]+$/,''); }
 
 // ── DISCORD ──────────────────────────────────────────────────────
 const CLIENT_ID     = '1509732849752866886';
-const TOKEN_ENDPOINT = 'https://dt-token.gnollboard.workers.dev/token';
+const TOKEN_ENDPOINT = '/.proxy/api/token'; // via Discord proxy — Portal mapping: /api → dt-token.gnollboard.workers.dev
 
 let discordSdk  = null;
 let discordUser = null; // { id, username, avatar } after SDK auth
