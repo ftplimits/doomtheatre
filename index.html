@@ -356,19 +356,17 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 body.panel-open #weather-menu { right:294px; }
 
 /* ── DISCORD SPEAKING ANIMATION — float up, grow, gold glow ── */
-.av-wrap, .ca-wrap {
+.av-wrap, .ca-wrap, #dm-avatar-wrap {
   transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), filter 0.2s ease;
 }
-.av-wrap.speaking, .ca-wrap.speaking {
+.av-wrap.speaking, .ca-wrap.speaking, #dm-avatar-wrap.speaking {
   transform: translateY(-10px) scale(1.1) !important;
   filter: drop-shadow(0 6px 20px rgba(200,169,110,0.9)) drop-shadow(0 0 12px rgba(255,210,60,0.7));
 }
-#dm-av-frame {
-  transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), filter 0.2s ease, box-shadow 0.2s ease;
-}
-#dm-av-frame.speaking {
-  transform: translateY(-10px) scale(1.1);
-  filter: drop-shadow(0 6px 20px rgba(200,169,110,0.9)) drop-shadow(0 0 12px rgba(255,210,60,0.7));
+/* Shift+click NPC override indicator */
+.av-wrap.shift-npc, .ca-wrap.shift-npc {
+  outline: 2px dashed var(--gold);
+  outline-offset: 3px;
 }
 
 /* ── DISCORD ACTIVITY MODE ── */
@@ -838,11 +836,32 @@ function discordAvatarUrl(user) {
 }
 
 // Called by SPEAKING_START / SPEAKING_STOP — find every frame tagged with this user
+let speakingAsAvatar = null; // avatar obj.id when host shift+clicks to speak as NPC
+
+function clearShiftNpc() {
+  if(!speakingAsAvatar) return;
+  document.querySelectorAll('.av-wrap.shift-npc,.ca-wrap.shift-npc').forEach(w=>{
+    w.classList.remove('shift-npc','speaking');
+  });
+  speakingAsAvatar = null;
+}
+
 function setSpeaking(userId, active) {
+  const isHostSpeaking = isHost && discordUser?.id === userId;
+  if(isHostSpeaking) {
+    if(speakingAsAvatar) {
+      document.querySelectorAll('[data-av-id="'+speakingAsAvatar+'"]').forEach(frame=>{
+        const wrap=frame.closest('.av-wrap,.ca-wrap');
+        if(wrap) wrap.classList.toggle('speaking',active);
+      });
+    } else {
+      el('dm-avatar-wrap').classList.toggle('speaking',active);
+    }
+    return;
+  }
   document.querySelectorAll('[data-discord-id="'+userId+'"]').forEach(el_=>{
-    const wrap=el_.closest('.av-wrap,.ca-wrap');
-    if(wrap) wrap.classList.toggle('speaking',active);
-    else el_.classList.toggle('speaking',active);
+    const wrap=el_.closest('.av-wrap,.ca-wrap')||el_;
+    wrap.classList.toggle('speaking',active);
   });
 }
 
@@ -922,7 +941,7 @@ async function startDiscordSession(instanceId) {
 
     // Tag DM frame with Discord ID so speaking highlights it — no auto avatar
     const user = await sdkPromise;
-    if(user) el('dm-av-frame').dataset.discordId = user.id;
+    if(user) el('dm-avatar-wrap').dataset.discordId = user.id;
 
     myPeer.on('connection', conn => {
       guestConns.push(conn);
@@ -1140,6 +1159,13 @@ function makeAvatarEl(obj,removeType) {
   wrap.appendChild(frame); wrap.appendChild(lbl);
   if(isHost) {
     wrap.draggable=true;
+    wrap.addEventListener('mousedown',e=>{
+      if(e.shiftKey && e.button===0) {
+        e.preventDefault(); e.stopPropagation();
+        clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc');
+        return;
+      }
+    });
     wrap.addEventListener('dragstart',e=>{ zoneSwapDrag={id:obj.id,entityType,obj}; e.dataTransfer.setData('text/plain','zone-swap'); e.dataTransfer.effectAllowed='move'; e.stopPropagation(); });
     wrap.addEventListener('dragend',()=>{ zoneSwapDrag=null; });
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
@@ -1201,7 +1227,8 @@ function makeCombatAv(obj, entityType, idx) {
     frame.addEventListener('mousedown',e=>{
       if(e.button!==0) return;
       e.preventDefault();
-      if(aoeActive) return; // let AoE canvas listener handle it via bubble
+      if(e.shiftKey && isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
+      if(aoeActive) return;
       combatDragStart(e,wrap,entityType,obj);
     });
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
@@ -1824,6 +1851,10 @@ function scheduleFlip() {
     send({type:'clear_draw'});
   });
 
+
+  // Clear speak-as-NPC on mouse release or shift key release (host only)
+  document.addEventListener('mouseup', ()=>{ if(speakingAsAvatar) clearShiftNpc(); });
+  document.addEventListener('keyup',   e=>{ if(e.key==='Shift'&&speakingAsAvatar) clearShiftNpc(); });
 
   ['upper-zone','lower-zone'].forEach(zid=>{
     const zone=el(zid);
