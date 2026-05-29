@@ -852,6 +852,7 @@ async function initDiscordSDK() {
       response_type: 'code',
       state: '',
       prompt: 'none',
+      redirect_uri: 'https://discord.com/api/oauth2/authorize',
       scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
     });
 
