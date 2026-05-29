@@ -872,13 +872,13 @@ async function initDiscordSDK() {
     // ── Step 4: Subscribe to voice speaking events ────────────────
     await discordSdk.subscribe(
       'SPEAKING_START',
-      { channel_id: discordSdk.channelId },
-      ({ user_id }) => { console.log('[Discord] SPEAKING_START', user_id); setSpeaking(user_id, true); }
+      ({ user_id }) => { console.log('[Discord] SPEAKING_START', user_id); setSpeaking(user_id, true); },
+      { channel_id: discordSdk.channelId }
     );
     await discordSdk.subscribe(
       'SPEAKING_STOP',
-      { channel_id: discordSdk.channelId },
-      ({ user_id }) => setSpeaking(user_id, false)
+      ({ user_id }) => setSpeaking(user_id, false),
+      { channel_id: discordSdk.channelId }
     );
     console.log('[Discord] Voice subscriptions active');
 
