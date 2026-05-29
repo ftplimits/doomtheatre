@@ -800,7 +800,7 @@ function fileBaseName(f) { return f.name.replace(/\.[^.]+$/,''); }
 
 // ── DISCORD ──────────────────────────────────────────────────────
 const CLIENT_ID     = 'DOOMTHEATRE_CLIENT_ID'; // ← your Discord app ID from the Portal
-const TOKEN_ENDPOINT = 'https://YOUR_WORKER.workers.dev/token'; // ← Cloudflare Worker URL (see worker.js)
+const TOKEN_ENDPOINT = 'https://dt-token.gnollboard.workers.dev/token';
 
 let discordSdk  = null;
 let discordUser = null; // { id, username, avatar } after SDK auth
