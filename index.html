@@ -373,6 +373,43 @@ body.panel-open #weather-menu { right:294px; }
 body.discord-mode #test-panel  { display:none !important; }
 body.discord-mode .browser-only { display:none !important; }
 
+/* ── CLOUD SAVE / LOAD MENUS ── */
+#save-menu, #load-menu {
+  position:fixed; z-index:35; display:none;
+  background:var(--panel-bg); border:1px solid var(--border);
+  border-radius:8px; padding:10px 12px;
+  box-shadow:0 4px 20px rgba(0,0,0,.85); min-width:220px;
+}
+#save-menu.open, #load-menu.open { display:block; }
+#save-name-input {
+  width:100%; box-sizing:border-box; background:rgba(0,0,0,.4);
+  border:1px solid var(--border); border-radius:4px; color:var(--gold);
+  font-family:'Cinzel',var(--font-display); font-size:11px; padding:5px 8px;
+  outline:none; margin:4px 0 6px;
+}
+#save-name-input:focus { border-color:var(--gold-dim); }
+#save-confirm-btn {
+  width:100%; padding:5px; background:rgba(80,40,0,.5);
+  border:1px solid var(--gold-dim); border-radius:4px;
+  color:var(--gold); font-family:'Cinzel',var(--font-display); font-size:10px;
+  cursor:pointer; transition:background .12s;
+}
+#save-confirm-btn:hover { background:rgba(120,60,0,.6); }
+#save-msg, #load-msg { font-size:10px; color:var(--text-dim); margin-top:5px; min-height:14px; }
+.load-item {
+  display:flex; align-items:center; gap:6px; padding:4px 0;
+  border-bottom:1px solid rgba(255,255,255,.06); font-size:10px;
+}
+.load-item:last-child { border-bottom:none; }
+.load-item-name { flex:1; color:var(--gold); font-family:'Cinzel',var(--font-display); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.load-item-date { color:var(--text-dim); white-space:nowrap; font-size:9px; }
+.load-item-btn  { padding:2px 7px; background:rgba(80,40,0,.4); border:1px solid var(--border); border-radius:3px; color:var(--gold-dim); cursor:pointer; font-size:10px; }
+.load-item-btn:hover  { color:var(--gold); border-color:var(--gold-dim); }
+.load-item-del  { padding:2px 6px; background:none; border:1px solid var(--border); border-radius:3px; color:var(--text-dim); cursor:pointer; font-size:10px; }
+.load-item-del:hover  { color:#f88; border-color:#f88; }
+#load-empty { color:var(--text-dim); font-size:10px; text-align:center; padding:10px 0; }
+body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
+
 /* ── PEER STATUS ── */
 #peer-status { position:fixed; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.07); border-radius:20px; padding:3px 14px; font-size:9px; letter-spacing:.1em; color:var(--text-dim); z-index:60; pointer-events:none; font-family:'Cinzel',var(--font-display); text-transform:uppercase; }
 #peer-status.connected { color:#5a9; }
@@ -680,11 +717,28 @@ body.combat #aoe-layer { display:block; }
   <button id="dm-clear-btn">🗑 Clear</button>
 </div>
 
+<!-- SAVE MENU -->
+<div id="save-menu">
+  <div class="dm-label">Save Name</div>
+  <input id="save-name-input" type="text" placeholder="e.g. Session 5 — Crypt" maxlength="40">
+  <button id="save-confirm-btn">💾 Save to Cloud</button>
+  <div id="save-msg"></div>
+</div>
+
+<!-- LOAD MENU -->
+<div id="load-menu">
+  <div class="dm-label" style="margin-bottom:4px">Cloud Saves</div>
+  <div id="load-list"><div id="load-empty">Loading…</div></div>
+  <div id="load-msg"></div>
+</div>
+
 <!-- TOOLBAR: combat leftmost, screen rightmost -->
 <div id="toolbar">
   <button class="tbtn" id="btn-combat"  title="Combat Mode">⚔️</button>
   <button class="tbtn" id="btn-weather" title="Weather">🌦</button>
   <button class="tbtn" id="btn-draw"    title="Draw Tool">✏️</button>
+  <button class="tbtn" id="btn-save"    title="Cloud Save">💾</button>
+  <button class="tbtn" id="btn-load"    title="Cloud Load">📂</button>
   <button class="tbtn" id="btn-screen"  title="DM Screen">🗂</button>
 </div>
 
@@ -1596,6 +1650,55 @@ function _drawSeg(seg) {
 window.drawSegment = seg => _drawSeg(seg);
 window.clearDraw   = ()  => { if(drawCtx) drawCtx.clearRect(0,0,GRID_W,GRID_H); };
 
+// ── CLOUD SAVE / LOAD ────────────────────────────────────────────
+// Routes through Discord's /.proxy/api in Activity mode, direct URL in browser
+function saveEndpoint(path) {
+  return (isDiscord ? '/.proxy/api' : 'https://dt-token.gnollboard.workers.dev') + path;
+}
+function getChannelId() {
+  return discordSdk?.channelId || roomCode || 'browser-mode';
+}
+function relativeTime(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if(s < 60)  return 'just now';
+  if(s < 3600) return Math.floor(s/60) + 'm ago';
+  if(s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+async function cloudSave(name) {
+  const safe = (k,v) => { if(typeof v==='number'&&!isFinite(v)) return 0; return v; };
+  const data = JSON.stringify(S, safe);
+  const res  = await fetch(saveEndpoint('/saves'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: getChannelId(), name, data }),
+  });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+async function cloudListSaves() {
+  const res = await fetch(saveEndpoint('/saves?channel=' + encodeURIComponent(getChannelId())));
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  return (await res.json()).saves || [];
+}
+
+async function cloudLoadSave(key) {
+  const res = await fetch(saveEndpoint('/saves/load?key=' + encodeURIComponent(key)));
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const { data } = await res.json();
+  const loaded = JSON.parse(data);
+  Object.assign(S, loaded);
+  renderAll();
+  if(isHost) broadcast({ type:'full_state', state:S }, null);
+}
+
+async function cloudDeleteSave(key) {
+  const res = await fetch(saveEndpoint('/saves?key=' + encodeURIComponent(key)), { method:'DELETE' });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+}
+
 // ── WEATHER ───────────────────────────────────────────────────────
 const WEATHER_OPTIONS = [
   {id:null,        label:'Clear',     emoji:'⭕'},
@@ -1852,10 +1955,84 @@ function scheduleFlip() {
   });
 
 
-  // Clear speak-as-NPC on mouse release or shift key release (host only)
+  // ── CLOUD SAVE ───────────────────────────────────────────────────
+  const saveMenu = el('save-menu');
+  const loadMenu = el('load-menu');
+
+  function positionMenu(menu, btn) {
+    const r = btn.getBoundingClientRect();
+    menu.style.top   = (r.bottom + 6) + 'px';
+    menu.style.right = (window.innerWidth - r.right) + 'px';
+  }
+  function closeMenus() { saveMenu.classList.remove('open'); loadMenu.classList.remove('open'); }
+  document.addEventListener('click', e=>{
+    if(!saveMenu.contains(e.target)&&e.target!==el('btn-save')) saveMenu.classList.remove('open');
+    if(!loadMenu.contains(e.target)&&e.target!==el('btn-load')) loadMenu.classList.remove('open');
+  });
+
+  // Save button
+  el('btn-save').addEventListener('click', e=>{
+    if(!isHost){ return; }
+    const open = !saveMenu.classList.contains('open');
+    closeMenus();
+    if(open){ positionMenu(saveMenu, el('btn-save')); saveMenu.classList.add('open'); el('save-name-input').focus(); }
+    e.stopPropagation();
+  });
+  el('save-confirm-btn').addEventListener('click', async ()=>{
+    const name = el('save-name-input').value.trim() || 'Unnamed';
+    const msg  = el('save-msg');
+    msg.textContent = '…Saving';
+    try {
+      await cloudSave(name);
+      msg.textContent = '✓ Saved!';
+      el('save-name-input').value = '';
+      setTimeout(()=>{ msg.textContent=''; saveMenu.classList.remove('open'); }, 1200);
+    } catch(err) { msg.textContent = '✗ ' + err.message; }
+  });
+  el('save-name-input').addEventListener('keydown', e=>{ if(e.key==='Enter') el('save-confirm-btn').click(); });
+
+  // Load button
+  el('btn-load').addEventListener('click', async e=>{
+    if(!isHost){ return; }
+    const open = !loadMenu.classList.contains('open');
+    closeMenus();
+    if(!open){ e.stopPropagation(); return; }
+    positionMenu(loadMenu, el('btn-load'));
+    loadMenu.classList.add('open');
+    e.stopPropagation();
+    const list = el('load-list');
+    list.innerHTML = '<div id="load-empty">Loading…</div>';
+    el('load-msg').textContent = '';
+    try {
+      const saves = await cloudListSaves();
+      if(!saves.length){ list.innerHTML = '<div id="load-empty">No cloud saves yet.</div>'; return; }
+      list.innerHTML = '';
+      saves.forEach(sv=>{
+        const row = document.createElement('div'); row.className='load-item';
+        row.innerHTML = `<span class="load-item-name" title="${sv.name}">${sv.name}</span>
+          <span class="load-item-date">${relativeTime(sv.ts)}</span>
+          <button class="load-item-btn">Load</button>
+          <button class="load-item-del" title="Delete">🗑</button>`;
+        row.querySelector('.load-item-btn').addEventListener('click', async ()=>{
+          el('load-msg').textContent = '…Loading';
+          try { await cloudLoadSave(sv.key); el('load-msg').textContent = '✓ Loaded!'; setTimeout(()=>loadMenu.classList.remove('open'), 800); }
+          catch(err) { el('load-msg').textContent = '✗ ' + err.message; }
+        });
+        row.querySelector('.load-item-del').addEventListener('click', async ()=>{
+          if(!confirm('Delete "' + sv.name + '"?')) return;
+          try { await cloudDeleteSave(sv.key); row.remove(); if(!el('load-list').children.length) list.innerHTML='<div id="load-empty">No saves.</div>'; }
+          catch(err) { el('load-msg').textContent = '✗ ' + err.message; }
+        });
+        list.appendChild(row);
+      });
+    } catch(err) { list.innerHTML = '<div id="load-empty">✗ ' + err.message + '</div>'; }
+  });
+
+  // Clear speak-as-NPC on mouse release or shift key release
   document.addEventListener('mouseup', ()=>{ if(speakingAsAvatar) clearShiftNpc(); });
   document.addEventListener('keyup',   e=>{ if(e.key==='Shift'&&speakingAsAvatar) clearShiftNpc(); });
 
+  // ── ZONE SWAP (drag player ↔ npc between rows) ──────────────────
   ['upper-zone','lower-zone'].forEach(zid=>{
     const zone=el(zid);
     zone.addEventListener('dragover',e=>{
