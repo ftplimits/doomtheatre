@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DooM Theatre</title>
+<script src="https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@1/output/index.iife.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=IM+Fell+English&display=swap');
@@ -341,6 +342,18 @@ body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset
 .wm-emoji { font-size:16px; line-height:1; }
 
 body.panel-open #weather-menu { right:294px; }
+
+/* ── DISCORD SPEAKING ANIMATION ── */
+@keyframes speaking-pulse {
+  0%,100% { box-shadow:0 0 0 3px rgba(88,200,88,0.8), 0 0 14px rgba(88,200,88,0.3); border-color:#58c858; }
+  50%      { box-shadow:0 0 0 4px rgba(88,200,88,1),   0 0 24px rgba(88,200,88,0.7); border-color:#7aff7a; }
+}
+.av-frame.speaking,
+.ca-frame.speaking,
+#dm-av-frame.speaking {
+  animation: speaking-pulse 0.75s ease-in-out infinite !important;
+  border-color: #58c858 !important;
+}
 
 /* ── DISCORD ACTIVITY MODE ── */
 body.discord-mode #test-panel  { display:none !important; }
@@ -786,44 +799,116 @@ async function toWebP(file, q=0.9) {
 function fileBaseName(f) { return f.name.replace(/\.[^.]+$/,''); }
 
 // ── DISCORD ──────────────────────────────────────────────────────
-const CLIENT_ID = 'DOOMTHEATRE_CLIENT_ID'; // ← replace with your Discord app ID from the Portal
+const CLIENT_ID     = 'DOOMTHEATRE_CLIENT_ID'; // ← your Discord app ID from the Portal
+const TOKEN_ENDPOINT = 'https://YOUR_WORKER.workers.dev/token'; // ← Cloudflare Worker URL (see worker.js)
+
+let discordSdk  = null;
+let discordUser = null; // { id, username, avatar } after SDK auth
 
 function detectDiscord() {
   const p = new URLSearchParams(window.location.search);
   return p.get('instance_id') || p.get('instanceId') || null;
 }
 
-function discordHandshake() {
-  // Lifts Discord's click-blocking overlay over the iframe
-  const nonce = Math.random().toString(36).slice(2);
-  window.parent.postMessage(
-    { v:1, cmd:'HANDSHAKE', args:{ v:1, client_id:CLIENT_ID, frame_id:nonce }, nonce },
-    '*'
-  );
+function discordAvatarUrl(user) {
+  if(!user) return null;
+  if(user.avatar) return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.webp?size=256`;
+  // Default avatar for accounts without a custom one
+  return `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(user.id) >> 22n) % 6}.png`;
+}
+
+// Called by SPEAKING_START / SPEAKING_STOP — find every frame tagged with this user
+function setSpeaking(userId, active) {
+  document.querySelectorAll(`[data-discord-id="${userId}"]`).forEach(frame => {
+    frame.classList.toggle('speaking', active);
+  });
+}
+
+async function initDiscordSDK() {
+  try {
+    // SDK loads as EmbeddedAppSDK global via the CDN IIFE build
+    const SDKCtor = window.EmbeddedAppSDK?.DiscordSDK ?? window.DiscordSDK;
+    if(!SDKCtor) { console.warn('[Discord] SDK not found — identity/voice unavailable'); return null; }
+
+    discordSdk = new SDKCtor(CLIENT_ID);
+    await discordSdk.ready(); // handles the HANDSHAKE automatically
+    console.log('[Discord] SDK ready | channelId:', discordSdk.channelId);
+
+    // ── Step 1: Authorize → get OAuth code ───────────────────────
+    const { code } = await discordSdk.commands.authorize({
+      client_id: CLIENT_ID,
+      response_type: 'code',
+      state: '',
+      prompt: 'none',
+      scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
+    });
+
+    // ── Step 2: Exchange code for token via Cloudflare Worker ─────
+    const tokenRes = await fetch(TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    if(!tokenRes.ok) throw new Error('Token exchange failed: ' + tokenRes.status);
+    const { access_token } = await tokenRes.json();
+
+    // ── Step 3: Authenticate with SDK — gives us the user object ──
+    const auth = await discordSdk.commands.authenticate({ access_token });
+    discordUser = auth.user; // { id, username, global_name, avatar, ... }
+    console.log('[Discord] Authenticated:', discordUser.username, '| id:', discordUser.id);
+
+    // ── Step 4: Subscribe to voice speaking events ────────────────
+    await discordSdk.subscribe(
+      'SPEAKING_START',
+      { channel_id: discordSdk.channelId },
+      ({ user_id }) => { console.log('[Discord] SPEAKING_START', user_id); setSpeaking(user_id, true); }
+    );
+    await discordSdk.subscribe(
+      'SPEAKING_STOP',
+      { channel_id: discordSdk.channelId },
+      ({ user_id }) => setSpeaking(user_id, false)
+    );
+    console.log('[Discord] Voice subscriptions active');
+
+    return discordUser;
+  } catch(e) {
+    console.error('[Discord] SDK init error:', e);
+    return null; // graceful fallback — PeerJS session still works
+  }
 }
 
 function getDiscordPeerConfig() {
-  // In Discord, PeerJS must route through Discord's CSP proxy.
-  // Portal URL mapping: prefix /peerjs → your PeerJS server or 0.peerjs.com
   return { host: window.location.hostname, path: '/peerjs', port: 443, secure: true, debug: 0 };
 }
 
 async function startDiscordSession(instanceId) {
-  // Sanitise instanceId → valid alphanumeric PeerJS ID (max 30 chars)
   roomCode = instanceId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 30);
   const cfg = getDiscordPeerConfig();
 
   setStatus('Connecting…');
-  console.log('[DooM Theatre] Discord instanceId:', instanceId, '→ roomCode:', roomCode);
-  console.log('[DooM Theatre] PeerJS config:', JSON.stringify(cfg));
+  console.log('[DooM Theatre] roomCode:', roomCode, '| PeerJS config:', JSON.stringify(cfg));
 
-  // ── Try to claim the host slot ─────────────────────────────────
+  // SDK init runs in parallel with PeerJS setup — whichever finishes first is fine
+  const sdkPromise = initDiscordSDK();
+
+  // ── Try to claim the host / DM slot ──────────────────────────────
   myPeer = new Peer(roomCode, cfg);
 
-  myPeer.on('open', id => {
-    // Room code was available — we are the DM / host
+  myPeer.on('open', async id => {
     isHost = true;
     console.log('[DooM Theatre] HOST claimed:', id);
+
+    // Wait for SDK identity before wiring up DM avatar
+    const user = await sdkPromise;
+    if(user) {
+      // Tag DM frame so speaking events highlight it
+      el('dm-av-frame').dataset.discordId = user.id;
+      // Auto-populate DM avatar + name from Discord
+      const avatarUrl = discordAvatarUrl(user);
+      const name = user.global_name || user.username;
+      if(avatarUrl) send({ type:'set_dm_avatar', url:avatarUrl, name });
+    }
+
     myPeer.on('connection', conn => {
       guestConns.push(conn);
       wireConn(conn, true);
@@ -837,17 +922,36 @@ async function startDiscordSession(instanceId) {
     renderAll();
   });
 
-  myPeer.on('error', err => {
+  myPeer.on('error', async err => {
     if(err.type === 'unavailable-id') {
-      // Host slot taken — we are a player / guest
-      console.log('[DooM Theatre] GUEST — host already exists at:', roomCode);
+      // Host slot taken — we are a player joining an existing session
+      console.log('[DooM Theatre] GUEST — connecting to host at:', roomCode);
       myPeer.destroy();
+
+      // Wait for identity before announcing ourselves
+      const user = await sdkPromise;
+
       myPeer = new Peer(cfg);
       myPeer.on('open', guestId => {
         console.log('[DooM Theatre] GUEST peer id:', guestId);
         hostConn = myPeer.connect(roomCode, { reliable: true });
         wireConn(hostConn, false);
-        hostConn.on('open', () => setStatus('Connected', 'connected'));
+        hostConn.on('open', () => {
+          setStatus('Connected', 'connected');
+          // Auto-announce ourselves as a player with Discord identity
+          const name = user ? (user.global_name || user.username) : 'Player';
+          const avatarUrl = user ? discordAvatarUrl(user) : null;
+          const player = {
+            id: uid(), name,
+            avatar: avatarUrl,
+            discordUserId: user?.id || null,
+            flipped: false, cx: null, cy: null,
+            icons: [], borderColor: null,
+          };
+          hostConn.send({ type:'add_player', player });
+          // Tag our own future frames (they'll arrive via full_state broadcast)
+          if(user) window._myDiscordId = user.id;
+        });
         hostConn.on('error', e => { setStatus('Join failed', 'error'); console.error(e); });
       });
       myPeer.on('error', e => { setStatus('PeerJS error: ' + e.type, 'error'); console.error(e); });
@@ -991,6 +1095,7 @@ function renderDmAvatar() {
 
 function _applyAvatarStyle(frame, obj) {
   if(obj.borderColor) frame.style.borderColor=obj.borderColor;
+  if(obj.discordUserId) frame.dataset.discordId=obj.discordUserId;
   const existing=frame.querySelector('.av-icon-overlay'); if(existing) existing.remove();
   if(obj.icons&&obj.icons.length>0){
     const ov=document.createElement('div'); ov.className='av-icon-overlay';
@@ -1600,9 +1705,8 @@ function scheduleFlip() {
 
   const instanceId = detectDiscord();
   if(instanceId) {
-    // ── Discord Activity mode ──────────────────────────────────────
+    // ── Discord Activity mode — SDK handles handshake internally ──
     isDiscord = true;
-    discordHandshake();
     document.body.classList.add('discord-mode');
     await startDiscordSession(instanceId);
   } else {
