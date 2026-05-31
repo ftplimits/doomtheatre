@@ -380,8 +380,8 @@ body.discord-mode .browser-only { display:none !important; }
   position:fixed; inset:0; z-index:10000; pointer-events:none;
   display:flex; align-items:center; justify-content:center;
   background:
-    radial-gradient(ellipse 120% 100% at 50% 50%,
-      #a80012 0%, #6e0010 25%, #2a0005 55%, #000 100%);
+    radial-gradient(ellipse 55% 35% at 50% 100%, rgba(180,60,0,0.10) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 80% at 50% 50%, #360006 0%, #0d0001 45%, #000 100%);
   animation: ib-fade 3.6s ease forwards;
 }
 @keyframes ib-fade {
@@ -389,8 +389,12 @@ body.discord-mode .browser-only { display:none !important; }
   60%     { opacity:1; }
   100%    { opacity:0; }
 }
+.ib-spots {
+  position:absolute; inset:0; width:100%; height:100%;
+  mix-blend-mode:screen; pointer-events:none;
+}
 .ib-frame {
-  position:relative; text-align:center;
+  position:relative; text-align:center; z-index:1;
   padding:52px 80px;
   border:1px solid rgba(200,169,110,.35);
   box-shadow:
@@ -818,6 +822,42 @@ body.combat #aoe-layer { display:block; }
 
 <!-- INTRO BANNER -->
 <div id="intro-banner">
+  <!-- Theatrical spotlights beaming down -->
+  <svg class="ib-spots" viewBox="0 0 1000 750" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="spot-blur"><feGaussianBlur stdDeviation="6"/></filter>
+      <!-- Warm spotlight gradient: bright top, fades to nothing -->
+      <linearGradient id="sg-l" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+        <stop offset="0%"   stop-color="#ffe8b0" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="#ffe8b0" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="sg-c" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+        <stop offset="0%"   stop-color="#fff5d0" stop-opacity="0.30"/>
+        <stop offset="100%" stop-color="#fff5d0" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="sg-r" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+        <stop offset="0%"   stop-color="#ffe8b0" stop-opacity="0.20"/>
+        <stop offset="100%" stop-color="#ffe8b0" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <g filter="url(#spot-blur)">
+      <!-- Left spot: angles right from top-left -->
+      <polygon points="155,0 210,0 480,750 -80,750"  fill="url(#sg-l)"/>
+      <!-- Centre spot: broad, straight down — overlaps for brighter centre -->
+      <polygon points="420,0 580,0 720,750 280,750"  fill="url(#sg-c)"/>
+      <!-- Right spot: angles left from top-right -->
+      <polygon points="790,0 845,0 1080,750 520,750" fill="url(#sg-r)"/>
+    </g>
+    <!-- Tiny source halos at the top edge -->
+    <ellipse cx="182" cy="2" rx="18" ry="5" fill="rgba(255,235,160,0.35)"/>
+    <ellipse cx="500" cy="2" rx="24" ry="6" fill="rgba(255,245,200,0.45)"/>
+    <ellipse cx="818" cy="2" rx="18" ry="5" fill="rgba(255,235,160,0.32)"/>
+    <!-- Stage-floor glow pools where beams land -->
+    <ellipse cx="200" cy="748" rx="180" ry="18" fill="rgba(255,220,120,0.06)"/>
+    <ellipse cx="500" cy="748" rx="230" ry="22" fill="rgba(255,230,140,0.09)"/>
+    <ellipse cx="800" cy="748" rx="180" ry="18" fill="rgba(255,220,120,0.06)"/>
+  </svg>
+
   <div class="ib-frame">
     <div class="ib-corner ib-tl"></div>
     <div class="ib-corner ib-tr"></div>
