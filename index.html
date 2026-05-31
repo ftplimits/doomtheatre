@@ -572,6 +572,30 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
 }
 body.panel-open #music-panel { right:294px; }
 
+/* ── HANDOUT LOG (players only) ── */
+#handout-log {
+  position:fixed; bottom:32px; left:16px; z-index:60;
+  display:none; flex-direction:column; gap:4px;
+  pointer-events:all;
+}
+#handout-log.visible { display:flex; }
+.hl-title {
+  font-family:'Cinzel',var(--font-display); font-size:8px;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim);
+}
+#handout-log-items {
+  display:flex; flex-direction:column; gap:4px;
+  max-height:260px; overflow-y:auto;
+}
+.hl-thumb {
+  width:56px; height:56px; cursor:pointer; flex-shrink:0;
+  border:1px solid var(--border); border-radius:4px; overflow:hidden;
+  transition:border-color .12s, transform .12s;
+  background:rgba(0,0,0,.5);
+}
+.hl-thumb:hover { border-color:var(--gold-dim); transform:scale(1.06); }
+.hl-thumb img { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+
 /* ── CURSOR MENU ── */
 #cursor-menu {
   position:fixed; z-index:200; display:none;
@@ -981,6 +1005,12 @@ body.combat #aoe-layer { display:block; }
   </div>
   <button id="dm-clear-btn">🗑 Clear</button>
   <button id="dm-eraser-btn">⬤ Eraser</button>
+</div>
+
+<!-- HANDOUT LOG (guests) -->
+<div id="handout-log">
+  <div class="hl-title">📜 Handouts</div>
+  <div id="handout-log-items"></div>
 </div>
 
 <!-- VOLUME BAR -->
@@ -1490,11 +1520,13 @@ function handleMsg(msg,fromConn) {
     case 'remove_player':
       S.players=S.players.filter(p=>p.id!==msg.id);
       document.querySelectorAll('[data-av-id="'+msg.id+'"]').forEach(f=>{ const w=f.closest('.av-wrap,.ca-wrap'); if(w) w.remove(); });
+      recalcInitiative();
       if(isHost) broadcast(msg,fromConn); break;
     case 'add_npc':       S.npcs.push(msg.npc); renderUpperZone(); if(isHost) broadcast(msg,fromConn); break;
     case 'remove_npc':
       S.npcs=S.npcs.filter(n=>n.id!==msg.id);
       document.querySelectorAll('[data-av-id="'+msg.id+'"]').forEach(f=>{ const w=f.closest('.av-wrap,.ca-wrap'); if(w) w.remove(); });
+      recalcInitiative();
       if(isHost) broadcast(msg,fromConn); break;
     case 'set_combat':    S.combatMode=msg.active; applyCombat(); if(isHost) broadcast(msg,fromConn); break;
     case 'combat_move': {
@@ -1518,7 +1550,13 @@ function handleMsg(msg,fromConn) {
       if(isHost) broadcast(msg,fromConn);
       break;
     }
-    case 'show_handout':    showHandout(msg.url); if(isHost) broadcast(msg,fromConn); break;
+    case 'show_handout':
+      showHandout(msg.url);
+      if(!isHost && !handoutLog.find(h=>h.url===msg.url)){
+        handoutLog.push({url:msg.url, name:msg.name||'Handout'});
+        updateHandoutLog();
+      }
+      if(isHost) broadcast(msg,fromConn); break;
     case 'dismiss_handout': dismissHandout(); if(isHost) broadcast(msg,fromConn); break;
     case 'ping':       if(window.spawnPing) window.spawnPing(msg.cx,msg.cy,msg.color); if(isHost) broadcast(msg,fromConn); break;
     case 'add_aoe':    S.aoeShapes.push(msg.shape); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
@@ -1962,7 +2000,7 @@ async function handleUpload(files,cat) {
   if(isHost) broadcast({type:'sync_library',library:S.library},null);
 }
 function applyBackdrop(item) { send({type:'set_backdrop', url:item.url}); }
-function applyHandout(item)  { send({type:'show_handout', url:item.url}); }
+function applyHandout(item)  { send({type:'show_handout', url:item.url, name:item.name||'Handout'}); }
 function applyPlayer(item)   { send({type:'add_player', player:{id:uid(),name:item.name||'Player',avatar:item.url,flipped:false,cx:null,cy:null}}); }
 function applyNpc(item)      { send({type:'add_npc',    npc:  {id:uid(),name:item.name||'NPC',   avatar:item.url,flipped:false,cx:null,cy:null}}); }
 
@@ -2069,8 +2107,23 @@ setTimeout(()=>{
   });
 }, 400);
 
+// ── HANDOUT LOG ───────────────────────────────────────────────────
+const handoutLog = []; // session-only — cleared on page load
+function updateHandoutLog() {
+  if(isHost) return;
+  const log=el('handout-log'), items=el('handout-log-items'); if(!log||!items) return;
+  items.innerHTML='';
+  handoutLog.forEach(h=>{
+    const div=document.createElement('div'); div.className='hl-thumb';
+    div.title=h.name||'Handout';
+    div.innerHTML=`<img src="${h.url}" alt="${h.name||''}">`;
+    div.addEventListener('click',()=>showHandout(h.url));
+    items.appendChild(div);
+  });
+  log.classList.toggle('visible', handoutLog.length>0);
+}
+
 // ── MUSIC ─────────────────────────────────────────────────────────
-const MUSIC_BASE = 'music/default/';
 const MUSIC_TRACKS = [
   {file:'1 - Tittle - Combat.mp3',    title:'Tittle',   cat:'Combat'},
   {file:'2 - Bells - Ambience.mp3',   title:'Bells',    cat:'Ambience'},
@@ -2304,7 +2357,7 @@ function aoeDistLabel(svg,x1,y1,x2,y2){
 }
 
 // ── PENCIL DRAW ───────────────────────────────────────────────────
-let drawCtx=null, drawPainting=false, drawColor='#111111', drawSize=4, drawLastX=0, drawLastY=0, drawEraser=false, drawThrottle=0;
+let drawCtx=null, drawPainting=false, drawColor='#111111', drawSize=4, drawLastX=0, drawLastY=0, drawEraser=false, drawThrottle=0, drawSentX=0, drawSentY=0;
 
 function applyErase(x, y, size=50) {
   if(!drawCtx) return;
@@ -2650,11 +2703,12 @@ function scheduleFlip() {
       const seg={x1:drawLastX,y1:drawLastY,x2:x,y2:y,color:drawColor,size:drawSize};
       _drawSeg(seg); // local every frame — smooth for host
       drawLastX=x; drawLastY=y;
-      if(now-drawThrottle>=50){ // broadcast at 20/sec
+      if(now-drawThrottle>=50){ // broadcast at 20/sec spanning from last-sent point
         drawThrottle=now;
-        const msg={type:'draw_segment',...seg};
-        S.drawStrokes.push(msg);
-        if(isHost) broadcast(msg,null); else if(hostConn?.open) hostConn.send(msg);
+        const netSeg={x1:drawSentX,y1:drawSentY,x2:x,y2:y,color:drawColor,size:drawSize};
+        drawSentX=x; drawSentY=y;
+        S.drawStrokes.push({type:'draw_segment',...netSeg});
+        if(isHost) broadcast({type:'draw_segment',...netSeg},null); else if(hostConn?.open) hostConn.send({type:'draw_segment',...netSeg});
       }
     }
   });
@@ -2665,7 +2719,7 @@ function scheduleFlip() {
     e.preventDefault();
     pc.setPointerCapture(e.pointerId);
     drawPainting=true;
-    const {x,y}=toCanvas(e); drawLastX=x; drawLastY=y;
+    const {x,y}=toCanvas(e); drawLastX=x; drawLastY=y; drawSentX=x; drawSentY=y;
     if(drawEraser){
       send({type:'draw_erase',x,y,size:50});
     } else {
