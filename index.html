@@ -512,6 +512,21 @@ body.combat #aoe-toolbar { display:flex; }
 #aoe-clear:hover { color:#f88; border-color:#f88; }
 .aoe-divider { height:1px; width:28px; background:var(--border); flex-shrink:0; }
 
+/* ── ERASER CURSOR ── */
+#eraser-cursor {
+  position:fixed; pointer-events:none; z-index:9999; display:none;
+  border-radius:50%; border:2px solid rgba(200,200,200,0.7);
+  background:rgba(180,180,180,0.12); transform:translate(-50%,-50%);
+}
+#dm-eraser-btn {
+  width:100%; padding:5px; background:none; border:1px solid var(--border);
+  border-radius:4px; color:var(--text-dim); font-size:10px;
+  font-family:'Cinzel',var(--font-display); cursor:pointer; margin-top:4px;
+  transition:color .12s,border-color .12s;
+}
+#dm-eraser-btn:hover { color:var(--gold-dim); border-color:var(--gold-dim); }
+#dm-eraser-btn.active { color:var(--gold); border-color:var(--gold); background:rgba(200,169,110,.1); }
+
 /* ── PENCIL DRAW CANVAS ── */
 #pencil-canvas {
   position:absolute; inset:0; width:1920px; height:1080px;
@@ -592,11 +607,11 @@ body.combat #aoe-layer { display:block; }
   0%,100% { stroke-opacity:.75; }
   50%      { stroke-opacity:1;  filter:drop-shadow(0 0 8px var(--aoe-glow)); }
 }
-/* Line AoE: half-transparent fill, solid outline (no stroke blink) */
-.aoe-shape.aoe-line { fill-opacity:0.06 !important; }
+/* Line AoE: fill pulses 10–35%, outline always solid */
+.aoe-shape.aoe-line { stroke-width:2.5px !important; }
 @keyframes aoe-line-pulse {
-  0%,100% { stroke-opacity:1; }
-  50%      { stroke-opacity:1; filter:drop-shadow(0 0 8px var(--aoe-glow)); }
+  0%,100% { fill-opacity:0.1;  stroke-opacity:1; }
+  50%      { fill-opacity:0.35; stroke-opacity:1; filter:drop-shadow(0 0 8px var(--aoe-glow)); }
 }
 .aoe-shape.aoe-line { animation:aoe-line-pulse 2.2s ease-in-out infinite; }
 .aoe-preview { fill-opacity:0.08; stroke-dasharray:8 4; stroke-opacity:.6; }
@@ -735,7 +750,11 @@ body.combat #aoe-layer { display:block; }
     <button class="dm-size"        data-dsize="24">L</button>
   </div>
   <button id="dm-clear-btn">🗑 Clear</button>
+  <button id="dm-eraser-btn">⬤ Eraser</button>
 </div>
+
+<!-- ERASER CURSOR -->
+<div id="eraser-cursor"></div>
 
 <!-- SAVE MENU -->
 <div id="save-menu">
@@ -1181,6 +1200,9 @@ function handleMsg(msg,fromConn) {
     case 'draw_segment':
       S.drawStrokes.push(msg); if(window.drawSegment) window.drawSegment(msg);
       if(isHost) broadcast(msg,fromConn); break;
+    case 'draw_erase':
+      applyErase(msg.x, msg.y, msg.size||50);
+      if(isHost) broadcast(msg,fromConn); break;
     case 'clear_draw':
       S.drawStrokes=[]; if(window.clearDraw) window.clearDraw();
       if(isHost) broadcast(msg,fromConn); break;
@@ -1608,8 +1630,11 @@ function aoeShapePath(shape) {
     e_.setAttribute('cx',x1);e_.setAttribute('cy',y1);e_.setAttribute('r',r); return e_;
   }
   if(type==='line'){
-    const e_=document.createElementNS(NS,'line');
-    e_.setAttribute('x1',x1);e_.setAttribute('y1',y1);e_.setAttribute('x2',x2);e_.setAttribute('y2',y2); return e_;
+    // Build corridor as polygon so fill and stroke are independent
+    const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy); if(len<1) return null;
+    const nx=(-dy/len)*(CELL/2), ny=(dx/len)*(CELL/2);
+    const pts=`${x1+nx},${y1+ny} ${x2+nx},${y2+ny} ${x2-nx},${y2-ny} ${x1-nx},${y1-ny}`;
+    const e_=document.createElementNS(NS,'polygon'); e_.setAttribute('points',pts); return e_;
   }
   if(type==='square'){
     const e_=document.createElementNS(NS,'rect');
@@ -1631,8 +1656,7 @@ function aoeShapePath(shape) {
 function styleAoeEl(e_,color,preview,shapeType){
   e_.setAttribute('stroke',color); e_.setAttribute('fill',color);
   e_.setAttribute('fill-opacity',preview?'0.06':'0.12');
-  // Use inline style so it overrides any CSS class stroke-width rules
-  const sw = shapeType==='line' ? CELL : (preview ? 2 : 2.5);
+  const sw = preview ? 2 : 2.5; // line is now a polygon; all shapes get thin outline
   e_.style.strokeWidth = sw+'px';
   e_.style.strokeLinecap = 'round';
   if(preview){
@@ -1684,7 +1708,15 @@ function aoeDistLabel(svg,x1,y1,x2,y2){
 }
 
 // ── PENCIL DRAW ───────────────────────────────────────────────────
-let drawCtx=null, drawPainting=false, drawColor='#111111', drawSize=4, drawLastX=0, drawLastY=0;
+let drawCtx=null, drawPainting=false, drawColor='#111111', drawSize=4, drawLastX=0, drawLastY=0, drawEraser=false;
+
+function applyErase(x, y, size=50) {
+  if(!drawCtx) return;
+  drawCtx.save();
+  drawCtx.globalCompositeOperation='destination-out';
+  drawCtx.beginPath(); drawCtx.arc(x,y,size,0,Math.PI*2); drawCtx.fill();
+  drawCtx.restore();
+}
 
 function initPencilCanvas() {
   const c=el('pencil-canvas'); drawCtx=c.getContext('2d');
@@ -1955,6 +1987,7 @@ function scheduleFlip() {
     const active=document.body.classList.toggle('draw-mode');
     el('btn-draw').classList.toggle('active',active);
     drawMenu.classList.toggle('open',active);
+    if(!active){ drawEraser=false; el('dm-eraser-btn').classList.remove('active'); eraserCursor.style.display='none'; }
     if(active){
       const r=el('btn-draw').getBoundingClientRect();
       drawMenu.style.top=(r.bottom+6)+'px';
@@ -1984,30 +2017,62 @@ function scheduleFlip() {
   el('dm-clear-btn').addEventListener('click',()=>{ if(isHost) send({type:'clear_draw'}); });
 
   // Pencil canvas drawing
+  const eraserCursor = el('eraser-cursor');
+  el('dm-eraser-btn').addEventListener('click',()=>{
+    drawEraser=!drawEraser;
+    el('dm-eraser-btn').classList.toggle('active',drawEraser);
+    pc.style.cursor=drawEraser?'none':'crosshair';
+    if(!drawEraser) eraserCursor.style.display='none';
+  });
+
   const pc=el('pencil-canvas');
+
+  // Eraser cursor follows mouse when eraser active
+  pc.addEventListener('pointermove',e=>{
+    if(drawEraser && document.body.classList.contains('draw-mode')){
+      const rect=pc.getBoundingClientRect();
+      const scl=rect.width/1920;
+      const r=Math.round(50*scl);
+      eraserCursor.style.display='block';
+      eraserCursor.style.width=eraserCursor.style.height=(r*2)+'px';
+      eraserCursor.style.left=e.clientX+'px'; eraserCursor.style.top=e.clientY+'px';
+    }
+    if(!drawPainting) return;
+    if(drawEraser){
+      const {x,y}=toCanvas(e);
+      send({type:'draw_erase',x,y,size:50});
+    } else {
+      const {x,y}=toCanvas(e);
+      if(x===drawLastX&&y===drawLastY) return;
+      const seg={x1:drawLastX,y1:drawLastY,x2:x,y2:y,color:drawColor,size:drawSize};
+      send({type:'draw_segment',...seg});
+      drawLastX=x; drawLastY=y;
+    }
+  });
+  pc.addEventListener('pointerleave',()=>{ eraserCursor.style.display='none'; });
+
   pc.addEventListener('pointerdown',e=>{
     if(e.button!==0||!document.body.classList.contains('draw-mode')||!isHost) return;
     e.preventDefault();
-    pc.setPointerCapture(e.pointerId); // route ALL pointer events to pc for this stroke
+    pc.setPointerCapture(e.pointerId);
     drawPainting=true;
     const {x,y}=toCanvas(e); drawLastX=x; drawLastY=y;
-    _drawSeg({x1:x,y1:y,x2:x,y2:y,color:drawColor,size:drawSize});
-  });
-  pc.addEventListener('pointermove',e=>{
-    if(!drawPainting) return;
-    const {x,y}=toCanvas(e);
-    if(x===drawLastX&&y===drawLastY) return;
-    const seg={x1:drawLastX,y1:drawLastY,x2:x,y2:y,color:drawColor,size:drawSize};
-    send({type:'draw_segment',...seg});
-    drawLastX=x; drawLastY=y;
+    if(drawEraser){
+      send({type:'draw_erase',x,y,size:50});
+    } else {
+      _drawSeg({x1:x,y1:y,x2:x,y2:y,color:drawColor,size:drawSize});
+    }
   });
   pc.addEventListener('pointerup',   ()=>{ drawPainting=false; });
   pc.addEventListener('pointercancel',()=>{ drawPainting=false; });
-  // Right-click in draw mode clears the canvas
+  // Right-click in draw mode → deselect tool only (does NOT clear drawings)
   pc.addEventListener('contextmenu',e=>{
     if(!document.body.classList.contains('draw-mode')||!isHost) return;
     e.preventDefault(); e.stopPropagation();
-    send({type:'clear_draw'});
+    el('btn-draw').classList.remove('active');
+    document.body.classList.remove('draw-mode');
+    drawMenu.classList.remove('open');
+    drawEraser=false; el('eraser-cursor').style.display='none';
   });
 
 
@@ -2182,11 +2247,12 @@ function scheduleFlip() {
     if(isHost) send({type:'clear_aoe'});
   });
 
-  // Right-click anywhere on canvas while AoE tool active → deselect tool
+  // Right-click canvas while AoE active → deselect tool AND clear placed shapes
   el('canvas').addEventListener('contextmenu',e=>{
     if(!aoeActive) return;
     e.preventDefault(); e.stopPropagation();
     clearAoeTool();
+    if(isHost) send({type:'clear_aoe'});
   });
 
   // AoE drawing on canvas (bubble phase is fine — ca-frame handler checks aoeActive)
