@@ -586,6 +586,13 @@ body.combat #aoe-layer { display:block; }
   0%,100% { stroke-opacity:.75; }
   50%      { stroke-opacity:1;  filter:drop-shadow(0 0 8px var(--aoe-glow)); }
 }
+/* Line AoE: half-transparent fill, solid outline (no stroke blink) */
+.aoe-shape.aoe-line { fill-opacity:0.06 !important; }
+@keyframes aoe-line-pulse {
+  0%,100% { stroke-opacity:1; }
+  50%      { stroke-opacity:1; filter:drop-shadow(0 0 8px var(--aoe-glow)); }
+}
+.aoe-shape.aoe-line { animation:aoe-line-pulse 2.2s ease-in-out infinite; }
 .aoe-preview { fill-opacity:0.08; stroke-dasharray:8 4; stroke-opacity:.6; }
 
 /* ── PING LAYER (inside canvas) ── */
@@ -1612,6 +1619,7 @@ function styleAoeEl(e_,color,preview,shapeType){
     if(shapeType==='line') e_.style.strokeDasharray='none';
   } else {
     e_.classList.add('aoe-shape');
+    if(shapeType==='line') e_.classList.add('aoe-line');
     e_.setAttribute('filter','url(#aoe-glow-filter)');
   }
   return e_;
@@ -1769,7 +1777,7 @@ function mkPart(fx, W, H, spread) {
     case 'embers':    return {x:r()*W,            y:spread?r()*H:H+10,  spd:0.4+r()*2,  sz:1+r()*3,  drift:(r()-.5)*.6, ph:r()*6.28, op:r()};
     case 'leaves':    return {x:r()*W,            y:spread?r()*H:-20,   spd:0.7+r()*1.5, rot:r()*6.28, rs:(r()-.5)*.09, ph:r()*6.28, sz:5+r()*9, col:['#c0392b','#e67e22','#f39c12','#a0522d','#8b4513'][0|r()*5]};
     case 'fireflies': return {x:r()*W,            y:r()*H,              vx:(r()-.5)*.6, vy:(r()-.5)*.4, ph:r()*6.28, sz:2+r()*2.5};
-    case 'fog':       return {x:r()*W,            y:r()*H,              vx:0.15+r()*.3, sz:90+r()*220, op:0.05+r()*.125};
+    case 'fog': { const sz=180+r()*440; return {x:spread?r()*W:-sz-50, y:r()*H, vx:0.2+r()*.25, sz, op:0.05+r()*.1}; }
     case 'dust':      return {x:r()*W,            y:r()*H,              vx:(r()-.5)*.7, vy:(r()-.5)*.7, sz:0.5+r()*1.8, col:r()>.45?'rgba(200,175,110,':'rgba(155,145,135,', op:0.25+r()*.625, ph:r()*6.28};
   }
 }
@@ -2127,6 +2135,12 @@ function scheduleFlip() {
   let aoePreviewEl=null;
   const aoeSvg=el('aoe-layer');
 
+  function clearAoeTool() {
+    aoeActive=null;
+    document.querySelectorAll('.aoe-shape-btn').forEach(b=>b.classList.remove('active'));
+    el('canvas').style.cursor='';
+  }
+
   document.querySelectorAll('.aoe-shape-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const s=btn.dataset.shape;
@@ -2141,7 +2155,17 @@ function scheduleFlip() {
       document.querySelectorAll('.aoe-color-btn').forEach(b=>b.classList.toggle('active',b.dataset.acolor===aoeColor));
     });
   });
-  el('aoe-clear').addEventListener('click',()=>{ if(isHost) send({type:'clear_aoe'}); });
+  el('aoe-clear').addEventListener('click',()=>{
+    clearAoeTool();
+    if(isHost) send({type:'clear_aoe'});
+  });
+
+  // Right-click anywhere on canvas while AoE tool active → deselect tool
+  el('canvas').addEventListener('contextmenu',e=>{
+    if(!aoeActive) return;
+    e.preventDefault(); e.stopPropagation();
+    clearAoeTool();
+  });
 
   // AoE drawing on canvas (bubble phase is fine — ca-frame handler checks aoeActive)
   el('canvas').addEventListener('mousedown',e=>{
