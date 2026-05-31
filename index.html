@@ -76,7 +76,7 @@ body.combat #combat-overlay { opacity:1; }
   gap:14px; padding:0 140px; pointer-events:none;
 }
 #upper-zone { top:0; height:34%; align-items:flex-start; padding-top:14px; }
-#lower-zone { bottom:0; height:34%; padding-bottom:170px; }
+#lower-zone { bottom:0; height:34%; padding-bottom:270px; }
 body.combat #upper-zone, body.combat #lower-zone { display:none; }
 
 /* ── NORMAL AVATAR FRAME ── */
@@ -295,7 +295,7 @@ body.panel-open #toolbar { right:294px; }
 .dctx-mode-btn[data-mode="dis"]    { background:rgba(74,26,26,.5); border-color:#5a3a3a; color:#e07070; }
 .dctx-mode-btn.active { filter:brightness(1.5); outline:1px solid #fff; }
 
-#dice-log { position:fixed; bottom:50px; right:31px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:240px; background:rgba(0,0,0,.75); border-radius:6px; padding:6px 10px; }
+#dice-log { position:fixed; bottom:20px; right:31px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:240px; background:rgba(0,0,0,.75); border-radius:6px; padding:6px 10px; }
 body.panel-open #dice-log { right:301px; }
 .log-entry { font-family:'Cinzel',var(--font-display); font-size:17px; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,1); text-align:right; white-space:nowrap; animation:log-in .2s ease both; }
 .log-entry.old { color:var(--gold-dim); font-size:15px; }
@@ -503,6 +503,40 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
   border-radius:4px; padding:2px 5px;
   pointer-events:none; text-shadow:none;
 }
+/* ── INITIATIVE PROMPT ── */
+#init-prompt {
+  position:fixed; inset:0; z-index:10000; display:none;
+  align-items:center; justify-content:center;
+  background:rgba(0,0,0,.65);
+}
+#init-prompt.open { display:flex; }
+.init-prompt-box {
+  background:var(--panel-bg); border:1px solid var(--gold-dim);
+  border-radius:10px; padding:20px 24px; min-width:220px;
+  box-shadow:0 4px 32px rgba(0,0,0,.9);
+  display:flex; flex-direction:column; gap:10px;
+}
+.init-prompt-title {
+  font-family:'Cinzel',var(--font-display); font-size:11px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--gold);
+}
+#init-prompt-input {
+  width:100%; box-sizing:border-box; background:rgba(0,0,0,.45);
+  border:1px solid var(--border); border-radius:4px; color:var(--gold);
+  font-family:'Cinzel',var(--font-display); font-size:20px; font-weight:700;
+  text-align:center; padding:6px 8px; outline:none;
+}
+#init-prompt-input:focus { border-color:var(--gold-dim); }
+.init-prompt-btns { display:flex; gap:6px; }
+.init-prompt-btns button {
+  flex:1; padding:5px 0; border-radius:4px; cursor:pointer;
+  font-family:'Cinzel',var(--font-display); font-size:10px;
+  border:1px solid var(--border); background:rgba(0,0,0,.3); color:var(--gold-dim);
+  transition:all .12s;
+}
+.init-prompt-btns button:hover { color:var(--gold); border-color:var(--gold-dim); }
+#init-prompt-ok { background:rgba(80,40,0,.5); border-color:var(--gold-dim); color:var(--gold); }
+
 /* ── PEER STATUS ── */
 #peer-status { display:none; } /* hidden — guests still use this internally */
 #peer-list {
@@ -858,7 +892,18 @@ body.combat #aoe-layer { display:block; }
   <button id="dm-eraser-btn">⬤ Eraser</button>
 </div>
 
-<!-- ERASER CURSOR -->
+<!-- INITIATIVE PROMPT -->
+<div id="init-prompt">
+  <div class="init-prompt-box">
+    <div class="init-prompt-title">Initiative — <span id="init-prompt-name"></span></div>
+    <input id="init-prompt-input" type="number" min="1" max="99" placeholder="e.g. 18">
+    <div class="init-prompt-btns">
+      <button id="init-prompt-ok">✓ Set</button>
+      <button id="init-prompt-clear">✕ Clear</button>
+      <button id="init-prompt-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
 <div id="eraser-cursor"></div>
 
 <!-- INTRO BANNER -->
@@ -1465,11 +1510,12 @@ function _applyAvatarStyle(frame, obj) {
 }
 
 function _promptInitiative(obj, entityType) {
-  const cur = obj.initiative!=null ? obj.initiative : '';
-  const val = window.prompt(`Initiative for ${obj.name||'avatar'} (blank to clear):`, cur);
-  if(val===null) return; // cancelled
-  const num = val.trim()==='' ? null : parseInt(val.trim());
-  send({type:'set_initiative', id:obj.id, entityType, value:isNaN(num)?null:num});
+  el('init-prompt-name').textContent = obj.name || 'Avatar';
+  el('init-prompt-input').value = obj.initiative != null ? obj.initiative : '';
+  el('init-prompt').classList.add('open');
+  el('init-prompt-input').focus();
+  el('init-prompt').dataset.pendingId = obj.id;
+  el('init-prompt').dataset.pendingType = entityType;
 }
 
 function makeAvatarEl(obj,removeType) {
@@ -1807,7 +1853,11 @@ function addLogEntry(sides,rolls,total,mode,mod,name) {
     if(i>0) d.style.opacity='0.55';
     const tag=e.mode==='adv'?'ADV':e.mode==='dis'?'DIS':`${e.rolls.length}d${e.sides}`;
     const modTag=e.mod?(e.mod>0?'+'+e.mod:''+e.mod):'';
-    d.textContent=`${e.name}: ${tag}${modTag} → ${e.total}`;
+    const rawRoll=e.total-e.mod;
+    const isNat20=e.sides===20&&rawRoll===20, isNat1=e.sides===20&&rawRoll===1;
+    const prefix=isNat20?'⭐ ':isNat1?'💀 ':'';
+    const suffix=isNat20?' ⭐':isNat1?' 💀':'';
+    d.textContent=`${prefix}${e.name}: ${tag}${modTag} → ${e.total}${suffix}`;
     log.appendChild(d);
   });
   showDicePopup(sides,rolls,total,mode,mod,name);
@@ -2382,6 +2432,23 @@ function scheduleFlip() {
     diceVisible=!diceVisible;
     el('dice-row').style.display=diceVisible?'':'none';
     el('dice-toggle').textContent=diceVisible?'▼':'▲';
+  });
+
+  // ── INITIATIVE MODAL ──────────────────────────────────────────────
+  function submitInitiative(clear) {
+    const id   = el('init-prompt').dataset.pendingId;
+    const type = el('init-prompt').dataset.pendingType;
+    if(!id) return;
+    const val = clear ? null : parseInt(el('init-prompt-input').value);
+    send({type:'set_initiative', id, entityType:type, value:(clear||isNaN(val))?null:val});
+    el('init-prompt').classList.remove('open');
+  }
+  el('init-prompt-ok').addEventListener('click', ()=>submitInitiative(false));
+  el('init-prompt-clear').addEventListener('click', ()=>submitInitiative(true));
+  el('init-prompt-cancel').addEventListener('click', ()=>el('init-prompt').classList.remove('open'));
+  el('init-prompt-input').addEventListener('keydown', e=>{
+    if(e.key==='Enter') submitInitiative(false);
+    if(e.key==='Escape') el('init-prompt').classList.remove('open');
   });
 
   // ── CLOUD SAVE ───────────────────────────────────────────────────
