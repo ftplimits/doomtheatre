@@ -1537,6 +1537,7 @@ function handleMsg(msg,fromConn) {
       S.drawStrokes.push(msg); if(window.drawSegment) window.drawSegment(msg);
       if(isHost) broadcast(msg,fromConn); break;
     case 'draw_erase':
+      S.drawStrokes.push({...msg}); // store so late-join replay includes erases
       applyErase(msg.x, msg.y, msg.size||50);
       if(isHost) broadcast(msg,fromConn); break;
     case 'clear_draw':
@@ -2316,7 +2317,7 @@ function initPencilCanvas() {
 function replayDrawStrokes() {
   if(!drawCtx) return;
   drawCtx.clearRect(0,0,GRID_W,GRID_H);
-  S.drawStrokes.forEach(seg=>_drawSeg(seg));
+  S.drawStrokes.forEach(seg=>{ if(seg.type==='draw_erase') applyErase(seg.x,seg.y,seg.size||50); else _drawSeg(seg); });
 }
 function _drawSeg(seg) {
   if(!drawCtx) return;
