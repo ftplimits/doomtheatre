@@ -80,7 +80,7 @@ body.combat #combat-overlay { opacity:1; }
 body.combat #upper-zone, body.combat #lower-zone { display:none; }
 
 /* ── NORMAL AVATAR FRAME ── */
-.av-wrap { display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:all; animation:av-enter .35s cubic-bezier(.34,1.56,.64,1) both; }
+.av-wrap { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:all; animation:av-enter .35s cubic-bezier(.34,1.56,.64,1) both; }
 @keyframes av-enter { from{opacity:0;transform:scale(.6) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
 .av-frame { width:200px; height:200px; border-radius:8px; overflow:hidden; background:rgba(20,12,4,.8); border:2px solid var(--border); position:relative; cursor:pointer; flex-shrink:0; transition:transform .5s ease,border-color .2s,box-shadow .2s; }
 .av-frame:hover       { border-color:var(--gold-dim); transform:scaleX(1)  translateY(-4px); box-shadow:0 10px 28px rgba(0,0,0,.6); }
@@ -496,20 +496,20 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
 
 /* ── INITIATIVE BADGE ── */
 .av-init-badge {
-  position:absolute; top:4px; right:4px; z-index:5;
+  position:absolute; top:4px; left:4px; z-index:5;
   background:rgba(0,0,0,.82); border:1px solid var(--gold);
   color:var(--gold); font-family:'Cinzel',var(--font-display);
   font-size:11px; font-weight:700; line-height:1;
   border-radius:4px; padding:2px 5px;
   pointer-events:none; text-shadow:none;
 }
-/* ── INITIATIVE PROMPT ── */
-#init-prompt {
+/* ── INITIATIVE & RENAME PROMPTS ── */
+#init-prompt, #rename-prompt {
   position:fixed; inset:0; z-index:10000; display:none;
   align-items:center; justify-content:center;
   background:rgba(0,0,0,.65);
 }
-#init-prompt.open { display:flex; }
+#init-prompt.open, #rename-prompt.open { display:flex; }
 .init-prompt-box {
   background:var(--panel-bg); border:1px solid var(--gold-dim);
   border-radius:10px; padding:20px 24px; min-width:220px;
@@ -520,13 +520,13 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
   font-family:'Cinzel',var(--font-display); font-size:11px;
   letter-spacing:.12em; text-transform:uppercase; color:var(--gold);
 }
-#init-prompt-input {
+#init-prompt-input, #rename-prompt-input {
   width:100%; box-sizing:border-box; background:rgba(0,0,0,.45);
   border:1px solid var(--border); border-radius:4px; color:var(--gold);
   font-family:'Cinzel',var(--font-display); font-size:20px; font-weight:700;
   text-align:center; padding:6px 8px; outline:none;
 }
-#init-prompt-input:focus { border-color:var(--gold-dim); }
+#init-prompt-input:focus, #rename-prompt-input:focus { border-color:var(--gold-dim); }
 .init-prompt-btns { display:flex; gap:6px; }
 .init-prompt-btns button {
   flex:1; padding:5px 0; border-radius:4px; cursor:pointer;
@@ -691,7 +691,7 @@ body.panel-open #draw-menu { right:294px; }
 
 /* ── AVATAR ICON OVERLAY — top-right, up to 3, right-to-left ── */
 .av-icon-overlay {
-  position:absolute; top:3px; right:3px;
+  position:absolute; top:3px; right:3px; z-index:5;
   display:flex; flex-direction:row-reverse; gap:1px;
   pointer-events:none;
 }
@@ -798,7 +798,7 @@ body.combat #aoe-layer { display:block; }
 <!-- CONTEXT MENU -->
 <div id="ctx-menu">
   <div class="ctx-item" id="ctx-kill">⚔ Kill</div>
-  <div class="ctx-item" id="ctx-rename-dm" style="display:none">✏ Rename</div>
+  <div class="ctx-item" id="ctx-rename">✏ Rename</div>
   <div class="ctx-sep"  id="ctx-style-sep"></div>
   <div class="ctx-mini">Border</div>
   <div class="ctx-swatch-row" id="ctx-border-row"></div>
@@ -892,6 +892,17 @@ body.combat #aoe-layer { display:block; }
   <button id="dm-eraser-btn">⬤ Eraser</button>
 </div>
 
+<!-- RENAME PROMPT -->
+<div id="rename-prompt">
+  <div class="init-prompt-box">
+    <div class="init-prompt-title">Rename — <span id="rename-prompt-name"></span></div>
+    <input id="rename-prompt-input" type="text" maxlength="40" placeholder="Enter name...">
+    <div class="init-prompt-btns">
+      <button id="rename-prompt-ok">✓ Rename</button>
+      <button id="rename-prompt-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
 <!-- INITIATIVE PROMPT -->
 <div id="init-prompt">
   <div class="init-prompt-box">
@@ -1435,11 +1446,12 @@ function handleMsg(msg,fromConn) {
           if(caWrap){ caWrap.classList.toggle('ca-large', msg.size==='large'); caWrap.classList.toggle('ca-small', msg.size==='small'); }
         }
         if('icons' in msg){
-          const old=frame.querySelector('.av-icon-overlay'); if(old) old.remove();
+          const wrap2=frame.parentElement||frame;
+          const old=wrap2.querySelector(':scope > .av-icon-overlay'); if(old) old.remove();
           if(msg.icons&&msg.icons.length>0){
             const ov=document.createElement('div'); ov.className='av-icon-overlay';
             msg.icons.forEach(ic=>{ const s=document.createElement('span'); s.textContent=ic; ov.appendChild(s); });
-            frame.appendChild(ov);
+            wrap2.appendChild(ov);
           }
         }
       });
@@ -1453,17 +1465,26 @@ function handleMsg(msg,fromConn) {
       console.log('[Discord] Attendee identified:', msg.username, msg.discordUserId);
       updatePeerList();
       break;
+    case 'rename_avatar': {
+      const isPlayer2=msg.entityType==='player';
+      const arr3=isPlayer2?S.players:S.npcs;
+      const ob3=arr3.find(o=>o.id===msg.id);
+      if(ob3) ob3.name=msg.name;
+      // Update all label/name-bar DOM elements for this avatar
+      document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
+        const wrap=frame.parentElement||frame;
+        // Theatre label
+        const lbl=wrap.querySelector('.av-label'); if(lbl) lbl.textContent=msg.name;
+        // Combat name bar
+        const bar=wrap.querySelector('.ca-name-bar'); if(bar) bar.textContent=msg.name;
+      });
+      if(isHost) broadcast(msg,fromConn); break;
+    }
     case 'set_initiative': {
       const arr2=msg.entityType==='player'?S.players:S.npcs;
       const ob2=arr2.find(o=>o.id===msg.id);
       if(ob2) ob2.initiative=msg.value;
-      document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
-        let badge=frame.querySelector('.av-init-badge');
-        if(msg.value!=null){
-          if(!badge){ badge=document.createElement('div'); badge.className='av-init-badge'; frame.appendChild(badge); }
-          badge.textContent=msg.value;
-        } else if(badge) badge.remove();
-      });
+      recalcInitiative();
       if(isHost) broadcast(msg,fromConn); break;
     }
     case 'set_dm_alt_avatar':
@@ -1484,7 +1505,7 @@ function syncCombatState() {
   el('combat-arena').innerHTML='';
   if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 }
-function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); if(window.applyWeather) window.applyWeather(S.weather); }
+function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); if(window.applyWeather) window.applyWeather(S.weather); recalcInitiative(); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
@@ -1492,28 +1513,51 @@ function renderDmAvatar() {
   el('dm-label').textContent=S.dmName||'DM';
 }
 
+function recalcInitiative() {
+  const all=[...S.players,...S.npcs].filter(o=>o.initiative!=null);
+  all.sort((a,b)=>b.initiative-a.initiative);
+  [...S.players,...S.npcs].forEach(o=>{ delete o._initRank; });
+  all.forEach((o,i)=>{ o._initRank=i+1; });
+  [...S.players,...S.npcs].forEach(obj=>{
+    document.querySelectorAll(`[data-av-id="${obj.id}"]`).forEach(frame=>{
+      const wrap=frame.parentElement||frame;
+      let badge=wrap.querySelector(':scope > .av-init-badge');
+      if(obj._initRank!=null){
+        if(!badge){ badge=document.createElement('div'); badge.className='av-init-badge'; wrap.appendChild(badge); }
+        badge.textContent=obj._initRank;
+      } else if(badge) badge.remove();
+    });
+  });
+}
+
 function _applyAvatarStyle(frame, obj) {
   if(obj.borderColor) frame.style.borderColor=obj.borderColor;
   if(obj.discordUserId) frame.dataset.discordId=obj.discordUserId;
-  const existing=frame.querySelector('.av-icon-overlay'); if(existing) existing.remove();
+  const wrap=frame.parentElement||frame;
+  // Icon overlay on WRAP (not frame) — never flips with avatar image
+  const existing=wrap.querySelector(':scope > .av-icon-overlay'); if(existing) existing.remove();
   if(obj.icons&&obj.icons.length>0){
     const ov=document.createElement('div'); ov.className='av-icon-overlay';
     obj.icons.forEach(ic=>{ const s=document.createElement('span'); s.textContent=ic; ov.appendChild(s); });
-    frame.appendChild(ov);
+    wrap.appendChild(ov);
   }
-  // Initiative badge (top-right of frame)
-  const oldInit=frame.querySelector('.av-init-badge'); if(oldInit) oldInit.remove();
-  if(obj.initiative!=null){
-    const ib=document.createElement('div'); ib.className='av-init-badge';
-    ib.textContent=obj.initiative; frame.appendChild(ib);
-  }
+  // Initiative badge managed separately by recalcInitiative()
+}
+
+function _promptRename(obj, entityType) {
+  el('rename-prompt-name').textContent = obj.name||'Avatar';
+  el('rename-prompt-input').value = obj.name||'';
+  el('rename-prompt').dataset.pendingId   = obj.id;
+  el('rename-prompt').dataset.pendingType = entityType;
+  el('rename-prompt').classList.add('open');
+  setTimeout(()=>{ el('rename-prompt-input').select(); el('rename-prompt-input').focus(); }, 50);
 }
 
 function _promptInitiative(obj, entityType) {
   el('init-prompt-name').textContent = obj.name || 'Avatar';
   el('init-prompt-input').value = obj.initiative != null ? obj.initiative : '';
   el('init-prompt').classList.add('open');
-  el('init-prompt-input').focus();
+  setTimeout(()=>{ el('init-prompt-input').select(); el('init-prompt-input').focus(); }, 50);
   el('init-prompt').dataset.pendingId = obj.id;
   el('init-prompt').dataset.pendingType = entityType;
 }
@@ -2434,6 +2478,26 @@ function scheduleFlip() {
     el('dice-toggle').textContent=diceVisible?'▼':'▲';
   });
 
+  // ── RENAME MODAL ──────────────────────────────────────────────────
+  function submitRename() {
+    const id   = el('rename-prompt').dataset.pendingId;
+    const type = el('rename-prompt').dataset.pendingType;
+    const name = el('rename-prompt-input').value.trim();
+    if(!id||!name) { el('rename-prompt').classList.remove('open'); return; }
+    if(type==='dm') {
+      send({type:'set_dm_name', name});
+    } else {
+      send({type:'rename_avatar', id, entityType:type, name});
+    }
+    el('rename-prompt').classList.remove('open');
+  }
+  el('rename-prompt-ok').addEventListener('click', submitRename);
+  el('rename-prompt-cancel').addEventListener('click', ()=>el('rename-prompt').classList.remove('open'));
+  el('rename-prompt-input').addEventListener('keydown', e=>{
+    if(e.key==='Enter') submitRename();
+    if(e.key==='Escape') el('rename-prompt').classList.remove('open');
+  });
+
   // ── INITIATIVE MODAL ──────────────────────────────────────────────
   function submitInitiative(clear) {
     const id   = el('init-prompt').dataset.pendingId;
@@ -2832,8 +2896,8 @@ function scheduleFlip() {
     e.preventDefault(); e.stopPropagation();
     ctxTarget = { entityType, id, domEl };
     const isAvatar = entityType !== 'dm';
-    el('ctx-kill').style.display      = isAvatar ? 'block' : 'none';
-    el('ctx-rename-dm').style.display = isAvatar ? 'none'  : 'block';
+    el('ctx-kill').style.display   = isAvatar ? 'block' : 'none';
+    el('ctx-rename').style.display = 'block';
     el('ctx-style-sep').style.display = isAvatar ? 'block' : 'none';
     document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display=isAvatar?'':'none');
 
@@ -2900,7 +2964,7 @@ function scheduleFlip() {
     e.preventDefault(); e.stopPropagation();
     ctxTarget={entityType:'dm',id:'__dm__',domEl:null};
     el('ctx-kill').style.display='none';
-    el('ctx-rename-dm').style.display='block';
+    el('ctx-rename').style.display='block';
     el('ctx-style-sep').style.display='none';
     document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display='none');
     const menu=el('ctx-menu');
@@ -2946,9 +3010,23 @@ function scheduleFlip() {
     killAvatar(ctxTarget.entityType, ctxTarget.id, ctxTarget.domEl);
     ctxTarget=null;
   });
-  el('ctx-rename-dm').addEventListener('click',()=>{
-    const name=prompt('DM name:', S.dmName||'DM');
-    if(name!==null) send({type:'set_dm_name', name:name.trim()||'DM'});
+  el('ctx-rename').addEventListener('click',()=>{
+    if(!ctxTarget) return;
+    el('ctx-menu').classList.remove('open');
+    if(ctxTarget.entityType==='dm') {
+      // DM rename — reuse rename modal with special handling
+      el('rename-prompt-name').textContent = S.dmName||'DM';
+      el('rename-prompt-input').value = S.dmName||'DM';
+      el('rename-prompt').dataset.pendingId   = '__dm__';
+      el('rename-prompt').dataset.pendingType = 'dm';
+      el('rename-prompt').classList.add('open');
+      setTimeout(()=>{ el('rename-prompt-input').select(); el('rename-prompt-input').focus(); }, 50);
+    } else {
+      const arr=(ctxTarget.entityType==='player'?S.players:S.npcs);
+      const obj=arr.find(o=>o.id===ctxTarget.id);
+      if(obj) _promptRename(obj, ctxTarget.entityType);
+    }
+    ctxTarget=null;
   });
 
   // Expose globally so message handler + applyCombat can call them
