@@ -150,7 +150,7 @@ body.combat #combat-arena { display:block; }
 /* ── TOOLBAR — top right ── */
 #toolbar {
   position:fixed; right:14px; top:14px;
-  z-index:25; display:flex; flex-direction:row; gap:8px;
+  z-index:25; display:none; flex-direction:row; gap:8px;
   transition:right .25s;
 }
 body.panel-open #toolbar { right:294px; }
@@ -1422,6 +1422,7 @@ async function startDiscordSession(instanceId) {
   myPeer.on('open', async id => {
     isHost = true;
     console.log('[DooM Theatre] HOST claimed:', id);
+    el('toolbar').style.display='flex'; // host sees toolbar
 
     // Tag DM frame with Discord ID so speaking highlights it — no auto avatar
     const user = await sdkPromise;
@@ -1829,16 +1830,48 @@ function makeCombatAv(obj, entityType, idx) {
     bar.textContent=obj.name; wrap.appendChild(bar);
   }
   if(isHost){
-    frame.addEventListener('mousedown',e=>{
+    frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
+    frame.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
+    // Combat drag — per-wrap pointer capture (works for all users, reliable in iframes)
+    wrap.addEventListener('pointerdown',e=>{
       if(e.button!==0) return;
       e.preventDefault();
       if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
-      if(e.shiftKey && isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
+      if(e.shiftKey&&isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
       if(aoeActive) return;
-      combatDragStart(e,wrap,entityType,obj);
+      wrap.setPointerCapture(e.pointerId);
+      const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
+      wrap.classList.add('dragging');
+      function onMove(ev){
+        const {x,y}=toCanvas(ev);
+        const rawX=sCX+(x-sc.x), rawY=sCY+(y-sc.y);
+        wrap.style.left=rawX+'px'; wrap.style.top=rawY+'px';
+        const half=CELL/2, sx=sCX+half, sy=sCY+half, ex=rawX+half, ey=rawY+half;
+        const dxSq=(rawX-sCX)/CELL, dySq=(rawY-sCY)/CELL;
+        const dist=Math.round(Math.sqrt(dxSq*dxSq+dySq*dySq));
+        const msv=el('measure-svg');
+        if(dist>0){
+          const ft=dist*5, lw=ft>=100?76:ft>=10?66:56, mx=(sx+ex)/2, my=(sy+ey)/2;
+          msv.style.display='block';
+          msv.innerHTML=`<circle cx="${sx}" cy="${sy}" r="6" fill="rgba(200,169,110,0.75)"/><line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="rgba(200,169,110,0.75)" stroke-width="2" stroke-dasharray="10 5"/><circle cx="${ex}" cy="${ey}" r="6" fill="rgba(200,169,110,0.75)"/><rect x="${mx-lw/2}" y="${my-13}" width="${lw}" height="24" rx="5" fill="rgba(0,0,0,0.8)"/><text x="${mx}" y="${my+6}" text-anchor="middle" font-family="Cinzel,serif" font-size="14" font-weight="700" fill="#c8a96e" letter-spacing="0.5">${ft} ft</text>`;
+        } else msv.style.display='none';
+      }
+      function onUp(ev){
+        wrap.removeEventListener('pointermove',onMove);
+        wrap.removeEventListener('pointerup',onUp);
+        el('measure-svg').style.display='none'; el('measure-svg').innerHTML='';
+        const {x,y}=toCanvas(ev);
+        const isLarge=obj.size==='large';
+        const cx=clamp(snap(sCX+(x-sc.x)),0,isLarge?GRID_W-2*CELL:GRID_W-CELL);
+        const cy=clamp(snap(sCY+(y-sc.y)),0,isLarge?GRID_H-2*CELL:GRID_H-CELL);
+        wrap.style.left=cx+'px'; wrap.style.top=cy+'px';
+        wrap.classList.remove('dragging');
+        obj.cx=cx; obj.cy=cy;
+        send({type:'combat_move',entityType,id:obj.id,cx,cy});
+      }
+      wrap.addEventListener('pointermove',onMove);
+      wrap.addEventListener('pointerup',onUp);
     });
-    frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
-    frame.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
   }
   return wrap;
 }
@@ -1906,61 +1939,6 @@ function exitCombat() {
     renderLowerZone();
   }, {once:true});
 }
-
-// ── COMBAT DRAG (uses canvas coordinate space) ───────────────────
-function combatDragStart(e,wrap,entityType,obj) {
-  const {x,y}=toCanvas(e);
-  cDrag={wrap,entityType,obj,startMX:x,startMY:y,startCX:obj.cx,startCY:obj.cy};
-  wrap.classList.add('dragging');
-}
-document.addEventListener('mousemove',e=>{
-  if(!cDrag) return;
-  const {x,y}=toCanvas(e);
-  const rawX=cDrag.startCX+(x-cDrag.startMX);
-  const rawY=cDrag.startCY+(y-cDrag.startMY);
-  cDrag.wrap.style.left=rawX+'px';
-  cDrag.wrap.style.top =rawY+'px';
-
-  // Measure line (SVG in canvas space)
-  const half=CELL/2;
-  const sx=cDrag.startCX+half, sy=cDrag.startCY+half;
-  const ex=rawX+half,           ey=rawY+half;
-  const dxSq=(rawX-cDrag.startCX)/CELL, dySq=(rawY-cDrag.startCY)/CELL;
-  const dist=Math.round(Math.sqrt(dxSq*dxSq+dySq*dySq));
-  const svg=el('measure-svg');
-  if(dist>0){
-    svg.style.display='block';
-    const mx=(sx+ex)/2, my=(sy+ey)/2, ft=dist*5;
-    const lw=ft>=100?76:ft>=10?66:56; // label width based on text length
-    svg.innerHTML=`
-      <circle cx="${sx}" cy="${sy}" r="6" fill="rgba(200,169,110,0.75)"/>
-      <line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}"
-        stroke="rgba(200,169,110,0.75)" stroke-width="2" stroke-dasharray="10 5"/>
-      <circle cx="${ex}" cy="${ey}" r="6" fill="rgba(200,169,110,0.75)"/>
-      <rect x="${mx-lw/2}" y="${my-13}" width="${lw}" height="24" rx="5" fill="rgba(0,0,0,0.8)"/>
-      <text x="${mx}" y="${my+6}" text-anchor="middle"
-        font-family="Cinzel,serif" font-size="14" font-weight="700"
-        fill="#c8a96e" letter-spacing="0.5">${ft} ft</text>`;
-  } else {
-    svg.style.display='none';
-  }
-});
-document.addEventListener('mouseup',e=>{
-  if(!cDrag) return;
-  el('measure-svg').style.display='none';
-  el('measure-svg').innerHTML='';
-  const {x,y}=toCanvas(e);
-  const isLarge = cDrag.obj.size === 'large';
-  const maxX = isLarge ? GRID_W-2*CELL : GRID_W-CELL;
-  const maxY = isLarge ? GRID_H-2*CELL : GRID_H-CELL;
-  const cx=clamp(snap(cDrag.startCX+(x-cDrag.startMX)), 0, maxX);
-  const cy=clamp(snap(cDrag.startCY+(y-cDrag.startMY)), 0, maxY);
-  cDrag.wrap.style.left=cx+'px'; cDrag.wrap.style.top=cy+'px';
-  cDrag.wrap.classList.remove('dragging');
-  cDrag.obj.cx=cx; cDrag.obj.cy=cy;
-  send({type:'combat_move',entityType:cDrag.entityType,id:cDrag.obj.id,cx,cy});
-  cDrag=null;
-});
 
 // ── HANDOUT ──────────────────────────────────────────────────────
 function showHandout(url) {
@@ -3098,13 +3076,13 @@ function scheduleFlip() {
   // Handout — click background or close button to dismiss; Escape key also works
   el('handout-overlay').addEventListener('click', e=>{
     console.log('[Handout] overlay click | target:', e.target.id||e.target.tagName, '| isOverlay:', e.target===el('handout-overlay'));
-    if(e.target === el('handout-overlay')) { e.stopPropagation(); send({type:'dismiss_handout'}); }
+    if(e.target === el('handout-overlay')) { e.stopPropagation(); dismissHandout(); } // local only
   });
   el('handout-close').addEventListener('click', e=>{
     console.log('[Handout] close btn clicked');
-    e.stopPropagation(); send({type:'dismiss_handout'});
+    e.stopPropagation(); dismissHandout(); // local only
   });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('handout-overlay').style.display==='flex'){ console.log('[Handout] Escape'); send({type:'dismiss_handout'}); } });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('handout-overlay').style.display==='flex'){ console.log('[Handout] Escape'); dismissHandout(); } }); // local only
 
   // DM Screen uploads
   document.querySelectorAll('.upload-btn').forEach(btn=>btn.addEventListener('click',()=>el('upload-'+btn.dataset.cat).click()));
