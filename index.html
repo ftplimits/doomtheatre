@@ -214,6 +214,10 @@ body.panel-open #toolbar { right:294px; }
 
 /* ── DICE ROW ── */
 #dice-row { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:15; display:flex; gap:4px; align-items:center; }
+#dice-toggle { position:fixed; bottom:4px; left:50%; transform:translateX(-50%); z-index:15; background:rgba(0,0,0,.55); border:1px solid var(--border); border-radius:3px; color:var(--gold-dim); font-size:9px; padding:1px 14px; cursor:pointer; transition:color .15s; letter-spacing:.05em; }
+#dice-toggle:hover { color:var(--gold); }
+body.browser-mode #dice-toggle { left:calc(50% + 95px); }
+body.browser-mode.tp-collapsed #dice-toggle { left:50%; }
 .die-btn { background:none; border:none; cursor:pointer; padding:2px; border-radius:4px; display:flex; align-items:center; justify-content:center; transition:transform .15s,filter .15s; }
 .die-btn:hover  { transform:scale(1.18); filter:drop-shadow(0 0 5px rgba(200,169,110,.6)); }
 .die-btn:active { transform:scale(.92); }
@@ -471,16 +475,14 @@ body.combat #dice-popup { top:32px; transform:translateX(-50%); }
 body.browser-mode #bottom-bar { left:calc(50% + 95px); }
 body.browser-mode.tp-collapsed #bottom-bar { left:50%; }
 
-/* ── AOE TOOLBAR — centred in left portion of screen ── */
+/* ── AOE TOOLBAR — left side, vertical ── */
 #aoe-toolbar {
-  position:fixed; bottom:28px;
-  right:calc(50% + 260px);
-  display:none; align-items:center; gap:5px;
+  position:fixed; left:16px; top:50%; transform:translateY(-50%);
+  z-index:20; display:none; flex-direction:column; align-items:center; gap:5px;
   background:var(--panel-bg); border:1px solid var(--border);
-  border-radius:8px; padding:5px 8px;
+  border-radius:8px; padding:8px 5px;
 }
 body.combat #aoe-toolbar { display:flex; }
-body.browser-mode #aoe-toolbar { right:calc(50% + 165px); }
 .aoe-shape-btn {
   width:36px; height:36px; background:none; border:1px solid var(--border);
   border-radius:5px; color:var(--gold-dim); font-size:18px; cursor:pointer;
@@ -502,7 +504,7 @@ body.browser-mode #aoe-toolbar { right:calc(50% + 165px); }
   display:flex; align-items:center; justify-content:center;
 }
 #aoe-clear:hover { color:#f88; border-color:#f88; }
-.aoe-divider { width:1px; height:28px; background:var(--border); flex-shrink:0; }
+.aoe-divider { height:1px; width:28px; background:var(--border); flex-shrink:0; }
 
 /* ── PENCIL DRAW CANVAS ── */
 #pencil-canvas {
@@ -649,6 +651,9 @@ body.combat #aoe-layer { display:block; }
   <div class="ctx-swatch-row" id="ctx-border-row"></div>
   <div class="ctx-mini">Status Icon</div>
   <div class="ctx-icon-row"   id="ctx-icon-row"></div>
+  <div class="ctx-sep" id="ctx-alt-sep"></div>
+  <div class="ctx-item" id="ctx-alt-img">🖼 Alternate Image</div>
+  <div class="ctx-item" id="ctx-clear-alt" style="font-size:9px;color:var(--text-dim)">✕ Clear Alternate</div>
   <div class="ctx-sep" id="ctx-discord-sep"></div>
   <div class="ctx-mini" id="ctx-discord-label">Assign Discord User</div>
   <div id="ctx-discord-users" style="padding:2px 14px 6px; display:flex; flex-direction:column; gap:3px;"></div>
@@ -658,6 +663,7 @@ body.combat #aoe-layer { display:block; }
 <div id="transition-overlay"></div>
 
 <!-- Hidden file inputs -->
+<input type="file" id="upload-alt-avatar" accept="image/*" style="display:none">
 <input type="file" id="upload-dm-avatar" accept="image/*" style="display:none">
 <input type="file" id="upload-backdrops" accept="image/*" multiple style="display:none">
 <input type="file" id="upload-players"   accept="image/*" multiple style="display:none">
@@ -693,6 +699,7 @@ body.combat #aoe-layer { display:block; }
     <div id="dice-palette-btn" title="Dice Colour"></div>
   </div>
 </div>
+<button id="dice-toggle" title="Toggle Dice">▼</button>
 <div id="dice-palette-popup"></div>
 <div id="dice-log"></div>
 
@@ -807,7 +814,7 @@ let   scale  = 1;             // current canvas scale factor
 const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs', peerSecure:true };
 
 // ── STATE ────────────────────────────────────────────────────────
-let S = {
+let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
   combatMode:false, weather:null, aoeShapes:[], drawStrokes:[],
@@ -910,12 +917,26 @@ function setSpeaking(userId, active) {
       });
     } else {
       el('dm-avatar-wrap').classList.toggle('speaking',active);
+      // Swap DM alt avatar image
+      if(S.dmAltAvatar || !active) {
+        const img=el('dm-av-frame').querySelector('img');
+        if(img) img.src = (active && S.dmAltAvatar) ? S.dmAltAvatar : (S.dmAvatar||'');
+      }
     }
     return;
   }
-  document.querySelectorAll('[data-discord-id="'+userId+'"]').forEach(el_=>{
-    const wrap=el_.closest('.av-wrap,.ca-wrap')||el_;
+  document.querySelectorAll('[data-discord-id="'+userId+'"]').forEach(frame=>{
+    const wrap=frame.closest('.av-wrap,.ca-wrap')||frame;
     wrap.classList.toggle('speaking',active);
+    // Swap alt avatar image for players only
+    const avId=frame.dataset.avId;
+    if(avId) {
+      const obj=S.players.find(p=>p.id===avId);
+      if(obj?.altAvatar||!active) {
+        const img=frame.querySelector('img');
+        if(img) img.src=(active&&obj?.altAvatar)?obj.altAvatar:(obj?.avatar||'');
+      }
+    }
   });
 }
 
@@ -1141,6 +1162,7 @@ function handleMsg(msg,fromConn) {
       if(obj){
         if('borderColor'  in msg) obj.borderColor=msg.borderColor;
         if('icons'        in msg) obj.icons=msg.icons;
+        if('altAvatar'    in msg) obj.altAvatar=msg.altAvatar;
         if('discordUserId' in msg) obj.discordUserId=msg.discordUserId;
       }
       document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
@@ -1167,6 +1189,10 @@ function handleMsg(msg,fromConn) {
         discordUserId: msg.discordUserId, username: msg.username, avatarHash: msg.avatarHash
       });
       console.log('[Discord] Attendee identified:', msg.username, msg.discordUserId);
+      break;
+    case 'set_dm_alt_avatar':
+      S.dmAltAvatar = msg.url;
+      if(isHost) broadcast(msg, fromConn);
       break;
     case 'set_weather': S.weather=msg.effect; if(window.applyWeather) window.applyWeather(msg.effect); if(isHost) broadcast(msg,fromConn); break;
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
@@ -1955,6 +1981,39 @@ function scheduleFlip() {
   });
 
 
+  // ── ALTERNATE AVATAR ─────────────────────────────────────────────
+  const uploadAltInput = el('upload-alt-avatar');
+  el('ctx-alt-img').addEventListener('click', ()=>{
+    uploadAltInput.click();
+    el('ctx-menu').classList.remove('open');
+  });
+  uploadAltInput.addEventListener('change', async e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const url=await toWebP(file);
+    if(ctxTarget?.entityType==='dm') {
+      send({type:'set_dm_alt_avatar', url});
+    } else if(ctxTarget) {
+      send({type:'set_avatar_style', id:ctxTarget.id, entityType:ctxTarget.entityType, altAvatar:url});
+    }
+    uploadAltInput.value='';
+  });
+  el('ctx-clear-alt').addEventListener('click', ()=>{
+    if(ctxTarget?.entityType==='dm') {
+      send({type:'set_dm_alt_avatar', url:null});
+    } else if(ctxTarget) {
+      send({type:'set_avatar_style', id:ctxTarget.id, entityType:ctxTarget.entityType, altAvatar:null});
+    }
+    el('ctx-menu').classList.remove('open');
+  });
+
+  // ── DICE TOGGLE ───────────────────────────────────────────────────
+  let diceVisible=true;
+  el('dice-toggle').addEventListener('click', ()=>{
+    diceVisible=!diceVisible;
+    el('dice-row').style.display=diceVisible?'':'none';
+    el('dice-toggle').textContent=diceVisible?'▼':'▲';
+  });
+
   // ── CLOUD SAVE ───────────────────────────────────────────────────
   const saveMenu = el('save-menu');
   const loadMenu = el('load-menu');
@@ -2315,6 +2374,12 @@ function scheduleFlip() {
     el('ctx-rename-dm').style.display = isAvatar ? 'none'  : 'block';
     el('ctx-style-sep').style.display = isAvatar ? 'block' : 'none';
     document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display=isAvatar?'':'none');
+
+    const isPlayer = entityType === 'player';
+    const isDm     = entityType === 'dm';
+    el('ctx-alt-sep').style.display   = (isPlayer||isDm) ? 'block' : 'none';
+    el('ctx-alt-img').style.display   = (isPlayer||isDm) ? 'block' : 'none';
+    el('ctx-clear-alt').style.display = (isPlayer||isDm) ? 'block' : 'none';
 
     // Discord user assignment section
     const discordSep   = el('ctx-discord-sep');
