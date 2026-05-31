@@ -261,6 +261,7 @@ body.panel-open #toolbar { right:294px; }
   line-height:14px; pointer-events:none; display:none;
 }
 .die-badge.visible { display:block; }
+.die-badge.positive { background:#1e6e2e; }
 /* d20 mode indicator */
 .die-btn.adv-mode svg polygon, .die-btn.adv-mode svg rect { fill:#1a4a2a; stroke:#7ec87e; }
 .die-btn.dis-mode svg polygon, .die-btn.dis-mode svg rect { fill:#4a1a1a; stroke:#e07070; }
@@ -294,7 +295,7 @@ body.panel-open #toolbar { right:294px; }
 .dctx-mode-btn[data-mode="dis"]    { background:rgba(74,26,26,.5); border-color:#5a3a3a; color:#e07070; }
 .dctx-mode-btn.active { filter:brightness(1.5); outline:1px solid #fff; }
 
-#dice-log { position:fixed; bottom:80px; right:21px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:240px; background:rgba(0,0,0,.5); border-radius:6px; padding:6px 10px; }
+#dice-log { position:fixed; bottom:50px; right:31px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:240px; background:rgba(0,0,0,.75); border-radius:6px; padding:6px 10px; }
 body.panel-open #dice-log { right:301px; }
 .log-entry { font-family:'Cinzel',var(--font-display); font-size:17px; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,1); text-align:right; white-space:nowrap; animation:log-in .2s ease both; }
 .log-entry.old { color:var(--gold-dim); font-size:15px; }
@@ -492,6 +493,16 @@ body.discord-mode .browser-only { display:none !important; }
 #load-empty { color:var(--text-dim); font-size:10px; text-align:center; padding:10px 0; }
 body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
 
+
+/* ── INITIATIVE BADGE ── */
+.av-init-badge {
+  position:absolute; top:4px; right:4px; z-index:5;
+  background:rgba(0,0,0,.82); border:1px solid var(--gold);
+  color:var(--gold); font-family:'Cinzel',var(--font-display);
+  font-size:11px; font-weight:700; line-height:1;
+  border-radius:4px; padding:2px 5px;
+  pointer-events:none; text-shadow:none;
+}
 /* ── PEER STATUS ── */
 #peer-status { display:none; } /* hidden — guests still use this internally */
 #peer-list {
@@ -1397,6 +1408,19 @@ function handleMsg(msg,fromConn) {
       console.log('[Discord] Attendee identified:', msg.username, msg.discordUserId);
       updatePeerList();
       break;
+    case 'set_initiative': {
+      const arr2=msg.entityType==='player'?S.players:S.npcs;
+      const ob2=arr2.find(o=>o.id===msg.id);
+      if(ob2) ob2.initiative=msg.value;
+      document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
+        let badge=frame.querySelector('.av-init-badge');
+        if(msg.value!=null){
+          if(!badge){ badge=document.createElement('div'); badge.className='av-init-badge'; frame.appendChild(badge); }
+          badge.textContent=msg.value;
+        } else if(badge) badge.remove();
+      });
+      if(isHost) broadcast(msg,fromConn); break;
+    }
     case 'set_dm_alt_avatar':
       S.dmAltAvatar = msg.url;
       if(isHost) broadcast(msg, fromConn);
@@ -1432,6 +1456,20 @@ function _applyAvatarStyle(frame, obj) {
     obj.icons.forEach(ic=>{ const s=document.createElement('span'); s.textContent=ic; ov.appendChild(s); });
     frame.appendChild(ov);
   }
+  // Initiative badge (top-right of frame)
+  const oldInit=frame.querySelector('.av-init-badge'); if(oldInit) oldInit.remove();
+  if(obj.initiative!=null){
+    const ib=document.createElement('div'); ib.className='av-init-badge';
+    ib.textContent=obj.initiative; frame.appendChild(ib);
+  }
+}
+
+function _promptInitiative(obj, entityType) {
+  const cur = obj.initiative!=null ? obj.initiative : '';
+  const val = window.prompt(`Initiative for ${obj.name||'avatar'} (blank to clear):`, cur);
+  if(val===null) return; // cancelled
+  const num = val.trim()==='' ? null : parseInt(val.trim());
+  send({type:'set_initiative', id:obj.id, entityType, value:isNaN(num)?null:num});
 }
 
 function makeAvatarEl(obj,removeType) {
@@ -1459,6 +1497,7 @@ function makeAvatarEl(obj,removeType) {
     wrap.addEventListener('dragend',()=>{ zoneSwapDrag=null; });
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
     frame.addEventListener('dblclick',e=>{ e.preventDefault(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
+    frame.addEventListener('click',e=>{ if(e.ctrlKey||e.metaKey){ e.preventDefault(); e.stopPropagation(); _promptInitiative(obj,entityType); } });
   }
   return wrap;
 }
@@ -1524,6 +1563,7 @@ function makeCombatAv(obj, entityType, idx) {
     frame.addEventListener('mousedown',e=>{
       if(e.button!==0) return;
       e.preventDefault();
+      if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
       if(e.shiftKey && isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
       if(aoeActive) return;
       combatDragStart(e,wrap,entityType,obj);
@@ -2660,7 +2700,11 @@ function scheduleFlip() {
     const btn=document.querySelector(`.die-btn[data-sides="${sides}"]`); if(!btn) return;
     const badge=btn.querySelector('.die-badge');
     const ds=getDSt(sides);
-    if(ds.mod!==0) { badge.textContent=ds.mod>0?'+'+ds.mod:''+ds.mod; badge.classList.add('visible'); }
+    if(ds.mod!==0) {
+      badge.textContent=ds.mod>0?'+'+ds.mod:''+ds.mod;
+      badge.classList.add('visible');
+      badge.classList.toggle('positive', ds.mod>0);
+    }
     else if(sides===20&&ds.mode!=='normal') { badge.textContent=ds.mode==='adv'?'A':'D'; badge.classList.add('visible'); }
     else if(ds.count>1) { badge.textContent=ds.count; badge.classList.add('visible'); }
     else { badge.classList.remove('visible'); }
