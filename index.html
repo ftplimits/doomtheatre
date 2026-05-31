@@ -136,13 +136,13 @@ body.combat #combat-arena { display:block; }
 
 /* Name overlay — inside frame, bottom bar */
 .ca-name-bar {
-  position:absolute; bottom:0; left:0; right:0;
+  width:100%; /* always full wrap width — stays unchanged regardless of frame size */
   background:rgba(0,0,0,0.75);
   font-family:'Cinzel',var(--font-display); font-size:8px; letter-spacing:.06em;
   color:var(--gold); text-shadow:0 1px 2px rgba(0,0,0,1);
   text-align:center; padding:2px 4px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  text-transform:uppercase;
+  text-transform:uppercase; flex-shrink:0;
 }
 
 /* ═══ VIEWPORT-SPACE UI (fixed, above scene) ═══ */
@@ -332,7 +332,6 @@ body.panel-open #dice-log { right:301px; }
 }
 .ctx-item:hover { background:rgba(139,0,0,.4); color:#ff9090; }
 
-.ca-frame.flipped .ca-name-bar { transform: scaleX(-1); }
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
 /* ── WEATHER CANVAS ── */
@@ -362,20 +361,20 @@ body.panel-open #weather-menu { right:294px; }
   transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), filter 0.2s ease;
 }
 .av-wrap.speaking {
-  transform: translateY(-10px) scale(calc(var(--av-scale,1) * 1.1)) !important;
+  transform: translateY(-10px) scale(1.1) !important;
   filter: drop-shadow(0 6px 20px rgba(200,169,110,0.9)) drop-shadow(0 0 12px rgba(255,210,60,0.7));
 }
 .ca-wrap.speaking, #dm-avatar-wrap.speaking {
   transform: translateY(-10px) scale(1.1) !important;
   filter: drop-shadow(0 6px 20px rgba(200,169,110,0.9)) drop-shadow(0 0 12px rgba(255,210,60,0.7));
 }
-/* Avatar size classes — theatre mode */
-.av-wrap           { transform: scale(var(--av-scale,1)); }
-.av-wrap.av-small  { --av-scale: 0.5; }
-.av-wrap.av-large  { --av-scale: 1.5; }
-/* Avatar size — combat large (2×2 cells = 240px) */
+/* Avatar size — theatre mode (±25% via frame dimensions) */
+.av-wrap.av-small .av-frame { width:150px; height:150px; }
+.av-wrap.av-large .av-frame { width:250px; height:250px; }
+/* Avatar size — combat sizes */
 .ca-wrap.ca-large           { width:240px; }
 .ca-wrap.ca-large .ca-frame { width:240px; height:240px; border-radius:8px; }
+.ca-wrap.ca-small .ca-frame { width:90px; height:90px; }
 /* Size toggle buttons */
 .ctx-size-row { display:flex; gap:4px; padding:2px 14px 6px; }
 .ctx-size-btn { flex:1; padding:3px 0; background:rgba(0,0,0,.3); border:1px solid var(--border); border-radius:4px; color:var(--text-dim); font-size:10px; font-family:'Cinzel',var(--font-display); cursor:pointer; transition:all .12s; }
@@ -1364,7 +1363,7 @@ function handleMsg(msg,fromConn) {
           const avWrap=frame.closest('.av-wrap');
           if(avWrap){ avWrap.classList.remove('av-small','av-large'); if(msg.size==='small') avWrap.classList.add('av-small'); else if(msg.size==='large') avWrap.classList.add('av-large'); }
           const caWrap=frame.closest('.ca-wrap');
-          if(caWrap){ caWrap.classList.toggle('ca-large', msg.size==='large'); }
+          if(caWrap){ caWrap.classList.toggle('ca-large', msg.size==='large'); caWrap.classList.toggle('ca-small', msg.size==='small'); }
         }
         if('icons' in msg){
           const old=frame.querySelector('.av-icon-overlay'); if(old) old.remove();
@@ -1485,6 +1484,7 @@ function makeCombatAv(obj, entityType, idx) {
   const wrap=document.createElement('div'); wrap.className='ca-wrap';
   wrap.dataset.entity=entityType;
   if(obj.size==='large') wrap.classList.add('ca-large');
+  else if(obj.size==='small') wrap.classList.add('ca-small');
   wrap.style.left=obj.cx+'px'; wrap.style.top=obj.cy+'px';
   wrap.style.animationDelay=(idx*0.08)+'s';
 
@@ -1493,10 +1493,10 @@ function makeCombatAv(obj, entityType, idx) {
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
 
-  // Name overlay bar inside frame
+  // Name bar lives in wrap (not frame) so it stays full-width regardless of frame size
   if(obj.name){
     const bar=document.createElement('div'); bar.className='ca-name-bar';
-    bar.textContent=obj.name; frame.appendChild(bar);
+    bar.textContent=obj.name; wrap.appendChild(bar);
   }
   _applyAvatarStyle(frame, obj);
 
@@ -1620,8 +1620,12 @@ document.addEventListener('mouseup',e=>{
   el('measure-svg').style.display='none';
   el('measure-svg').innerHTML='';
   const {x,y}=toCanvas(e);
-  const cx=clamp(snap(cDrag.startCX+(x-cDrag.startMX)), 0, GRID_W-CELL);
-  const cy=clamp(snap(cDrag.startCY+(y-cDrag.startMY)), 0, GRID_H-CELL);
+  const isLarge = cDrag.obj.size === 'large';
+  const snapFn = isLarge ? v=>Math.round(v/(2*CELL))*(2*CELL) : snap;
+  const maxX   = isLarge ? GRID_W-2*CELL : GRID_W-CELL;
+  const maxY   = isLarge ? GRID_H-2*CELL : GRID_H-CELL;
+  const cx=clamp(snapFn(cDrag.startCX+(x-cDrag.startMX)), 0, maxX);
+  const cy=clamp(snapFn(cDrag.startCY+(y-cDrag.startMY)), 0, maxY);
   cDrag.wrap.style.left=cx+'px'; cDrag.wrap.style.top=cy+'px';
   cDrag.wrap.classList.remove('dragging');
   cDrag.obj.cx=cx; cDrag.obj.cy=cy;
