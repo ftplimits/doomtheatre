@@ -154,6 +154,30 @@ body.combat #combat-arena { display:block; }
   transition:right .25s;
 }
 body.panel-open #toolbar { right:294px; }
+
+/* ── VOLUME BAR ── */
+#volume-bar {
+  position:fixed; top:58px; right:14px; z-index:25;
+  display:flex; align-items:center; gap:7px;
+  background:rgba(0,0,0,.6); border:1px solid var(--border);
+  border-radius:20px; padding:4px 11px;
+  transition:right .25s;
+}
+#volume-icon { font-size:12px; color:var(--gold-dim); cursor:pointer; user-select:none; }
+#volume-slider {
+  -webkit-appearance:none; appearance:none;
+  width:130px; height:3px; border-radius:2px; outline:none; cursor:pointer;
+  background:linear-gradient(to right, var(--gold-dim) 0%, var(--gold-dim) var(--vol), #333 var(--vol), #333 100%);
+}
+#volume-slider::-webkit-slider-thumb {
+  -webkit-appearance:none; width:12px; height:12px; border-radius:50%;
+  background:var(--gold); cursor:pointer;
+}
+#volume-slider::-moz-range-thumb {
+  width:12px; height:12px; border-radius:50%;
+  background:var(--gold); cursor:pointer; border:none;
+}
+body.panel-open #volume-bar { right:294px; }
 .tbtn {
   width:36px; height:36px;
   background:var(--panel-bg); border:1px solid var(--border); border-radius:6px;
@@ -957,6 +981,12 @@ body.combat #aoe-layer { display:block; }
   </div>
   <button id="dm-clear-btn">🗑 Clear</button>
   <button id="dm-eraser-btn">⬤ Eraser</button>
+</div>
+
+<!-- VOLUME BAR -->
+<div id="volume-bar">
+  <span id="volume-icon">🔊</span>
+  <input type="range" id="volume-slider" min="0" max="100" value="30" style="--vol:30%">
 </div>
 
 <!-- MUSIC PANEL -->
@@ -2676,6 +2706,21 @@ function scheduleFlip() {
     diceVisible=!diceVisible;
     el('dice-row').style.display=diceVisible?'':'none';
     el('dice-toggle').textContent=diceVisible?'▼':'▲';
+  });
+
+  // ── VOLUME SLIDER (all players) ──────────────────────────────────
+  musicAudio.volume = 0.3;
+  const volSlider = el('volume-slider');
+  function applyVolume() {
+    const v = volSlider.value / 100;
+    musicAudio.volume = v;
+    volSlider.style.setProperty('--vol', volSlider.value + '%');
+    el('volume-icon').textContent = v === 0 ? '🔇' : v < 0.4 ? '🔉' : '🔊';
+  }
+  volSlider.addEventListener('input', applyVolume);
+  el('volume-icon').addEventListener('click', ()=>{
+    volSlider.value = volSlider.value > 0 ? 0 : 30;
+    applyVolume();
   });
 
   // ── MUSIC ─────────────────────────────────────────────────────────
