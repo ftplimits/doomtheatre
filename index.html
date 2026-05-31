@@ -3021,9 +3021,10 @@ function scheduleFlip() {
     }
 
     const menu=el('ctx-menu');
-    menu.style.left=e.clientX+'px';
-    menu.style.top =e.clientY+'px';
-    menu.classList.add('open');
+    menu.classList.add('open'); // open first so offsetHeight is measurable
+    const mh=menu.offsetHeight, mw=menu.offsetWidth;
+    menu.style.left=Math.min(e.clientX, window.innerWidth -mw-6)+'px';
+    menu.style.top =(e.clientY+mh>window.innerHeight-6 ? e.clientY-mh : e.clientY)+'px';
   }
   // DM avatar right-click → rename only, no style sections
   el('dm-av-frame').addEventListener('contextmenu',e=>{
@@ -3035,8 +3036,10 @@ function scheduleFlip() {
     el('ctx-style-sep').style.display='none';
     document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display='none');
     const menu=el('ctx-menu');
-    menu.style.left=e.clientX+'px'; menu.style.top=e.clientY+'px';
     menu.classList.add('open');
+    const mh2=menu.offsetHeight, mw2=menu.offsetWidth;
+    menu.style.left=Math.min(e.clientX, window.innerWidth -mw2-6)+'px';
+    menu.style.top =(e.clientY+mh2>window.innerHeight-6 ? e.clientY-mh2 : e.clientY)+'px';
   });
   document.addEventListener('click',()=>el('ctx-menu').classList.remove('open'));
 
