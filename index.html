@@ -86,7 +86,7 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 .av-frame:hover       { border-color:var(--gold-dim); transform:scaleX(1)  translateY(-4px); box-shadow:0 10px 28px rgba(0,0,0,.6); }
 .av-frame.flipped     { transform:scaleX(-1); }
 .av-frame.flipped:hover { transform:scaleX(-1) translateY(-4px); box-shadow:0 10px 28px rgba(0,0,0,.6); }
-.av-frame img { width:100%; height:100%; object-fit:cover; object-position:center top; display:block; }
+.av-frame img { width:100%; height:100%; object-fit:cover; object-position:center top; display:block; pointer-events:none; -webkit-user-drag:none; }
 .av-placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:40px; color:var(--text-dim); }
 .av-label { font-family:'Cinzel',var(--font-display); font-size:15px; letter-spacing:.08em; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,.9); text-align:center; width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; background:rgba(0,0,0,.5); border-radius:4px; padding:2px 10px; }@keyframes av-enter-bottom { from{opacity:0;transform:translateY(80px) scale(.85)} to{opacity:1;transform:translateY(0) scale(1)} }
 @keyframes av-enter-top    { from{opacity:0;transform:translateY(-80px) scale(.85)} to{opacity:1;transform:translateY(0) scale(1)} }
@@ -102,7 +102,7 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 #dm-av-frame.flipped { transform:scaleX(-1); }
 #dm-av-frame { width:200px; height:200px; border-radius:50%; overflow:hidden; background:rgba(20,12,4,.85); border:2px solid var(--blood); box-shadow:0 0 16px rgba(139,0,0,.4),inset 0 0 8px rgba(0,0,0,.5); cursor:pointer; position:relative; transition:box-shadow .25s; }
 #dm-av-frame:hover { box-shadow:0 0 24px rgba(139,0,0,.7),inset 0 0 8px rgba(0,0,0,.5); }
-#dm-av-frame img { width:100%; height:100%; object-fit:cover; object-position:center top; }
+#dm-av-frame img { width:100%; height:100%; object-fit:cover; object-position:center top; pointer-events:none; -webkit-user-drag:none; }
 #dm-av-frame .av-placeholder { font-size:36px; }
 #dm-label { font-family:'Cinzel',var(--font-display); font-size:15px; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); background:rgba(0,0,0,.5); border-radius:4px; padding:2px 10px; }
 
@@ -131,7 +131,7 @@ body.combat #combat-arena { display:block; }
 }
 .ca-wrap.dragging .ca-frame { border-color:var(--gold); box-shadow:0 0 16px rgba(200,169,110,.4); }
 .ca-frame.flipped { transform:scaleX(-1); }
-.ca-frame img { width:100%; height:100%; object-fit:cover; object-position:center top; display:block; }
+.ca-frame img { width:100%; height:100%; object-fit:cover; object-position:center top; display:block; pointer-events:none; -webkit-user-drag:none; }
 .ca-frame .av-placeholder { font-size:24px; }
 
 /* Name overlay — absolute within ca-wrap, always at cell bottom */
@@ -1476,7 +1476,7 @@ async function doJoin(code) {
   wireConn(hostConn,false);
   hostConn.on('open',()=>{ setStatus('Connected','connected'); setTPStatus('Joined: '+code); });
 }
-function send(msg)          { if(isHost) handleMsg(msg,null); else if(hostConn?.open) hostConn.send(msg); }
+function send(msg)          { handleMsg(msg,null); if(!isHost&&hostConn?.open) hostConn.send(msg); }
 function broadcast(msg,exc) { guestConns.forEach(c=>{ if(c!==exc&&c.open) c.send(msg); }); }
 
 // ── MESSAGES ─────────────────────────────────────────────────────
@@ -1520,7 +1520,7 @@ function handleMsg(msg,fromConn) {
     }
     case 'show_handout':    showHandout(msg.url); if(isHost) broadcast(msg,fromConn); break;
     case 'dismiss_handout': dismissHandout(); if(isHost) broadcast(msg,fromConn); break;
-    case 'ping':       if(window.spawnPing) window.spawnPing(msg.cx,msg.cy); if(isHost) broadcast(msg,fromConn); break;
+    case 'ping':       if(window.spawnPing) window.spawnPing(msg.cx,msg.cy,msg.color); if(isHost) broadcast(msg,fromConn); break;
     case 'add_aoe':    S.aoeShapes.push(msg.shape); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'remove_aoe': S.aoeShapes=S.aoeShapes.filter(s=>s.id!==msg.id); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'move_aoe': {
@@ -1993,7 +1993,10 @@ function rollDie(sides) {
     const raw = total - ds.mod; // chosen roll (max for adv, min for dis)
     if(raw===1||raw===20) playSound('nat', 0.7);
   }
-  send({type:'dice_roll', sides, rolls, total, mode, mod:ds.mod, name:S.dmName||'DM'});
+  const myName = isHost
+    ? (S.dmName||'DM')
+    : (S.players.find(p=>p.discordUserId===discordUser?.id)?.name || discordUser?.username || 'Player');
+  send({type:'dice_roll', sides, rolls, total, mode, mod:ds.mod, name:myName});
   if(window.onDiceRolled) window.onDiceRolled(sides);
 }
 
@@ -2163,12 +2166,13 @@ function applyCursor(key) {
 }
 
 // ── PING ─────────────────────────────────────────────────────────
-window.spawnPing = function(cx,cy) {
+window.spawnPing = function(cx,cy,color) {
+  const col=color||'#c8a96e';
   const svg=el('ping-layer'); if(!svg) return;
   [0,350].forEach(delayMs=>{
     const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
     c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r','4');
-    c.setAttribute('fill','none');c.setAttribute('stroke','#c8a96e');c.setAttribute('stroke-width','3');
+    c.setAttribute('fill','none');c.setAttribute('stroke',col);c.setAttribute('stroke-width','3');
     svg.appendChild(c);
     let t0=null;
     const dur=1100,maxR=70;
@@ -2922,10 +2926,10 @@ function scheduleFlip() {
 
   // ── PING — middle mouse ─────────────────────────────────────────
   el('canvas').addEventListener('mousedown',e=>{
-    if(e.button!==1||!isHost) return;
+    if(e.button!==1) return;
     e.preventDefault();
     const {x,y}=toCanvas(e);
-    send({type:'ping',cx:x,cy:y});
+    send({type:'ping',cx:x,cy:y,color:currentDiceFill||'#c8a96e'});
   });
 
   // ── AOE SHAPES ─────────────────────────────────────────────────
@@ -2966,7 +2970,7 @@ function scheduleFlip() {
 
   // AoE drawing on canvas (bubble phase is fine — ca-frame handler checks aoeActive)
   el('canvas').addEventListener('mousedown',e=>{
-    if(e.button!==0||!aoeActive||!isHost||!S.combatMode) return;
+    if(e.button!==0||!aoeActive||!S.combatMode) return;
     e.preventDefault();
     const raw=toCanvas(e);
     aoeDragStart=snapAoeXY(raw.x,raw.y);
