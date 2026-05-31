@@ -1551,7 +1551,12 @@ function rollDie(sides) {
     for(let i=0;i<ds.count;i++) rolls.push(rnd(sides));
     total=rolls.reduce((a,b)=>a+b,0);
   }
-  total += ds.mod; // ability score modifier
+  total += ds.mod;
+  // Natural 1 or 20 on a d20 (raw roll before modifier)
+  if(sides===20) {
+    const raw = total - ds.mod; // chosen roll (max for adv, min for dis)
+    if(raw===1||raw===20) playSound('nat', 0.7);
+  }
   send({type:'dice_roll', sides, rolls, total, mode, mod:ds.mod, name:S.dmName||'DM'});
   if(window.onDiceRolled) window.onDiceRolled(sides);
 }
@@ -1596,6 +1601,25 @@ function addLogEntry(sides,rolls,total,mode,mod,name) {
   });
   showDicePopup(sides,rolls,total,mode,mod,name);
 }
+
+// ── AUDIO ─────────────────────────────────────────────────────────
+function playSound(name, vol=1) {
+  try {
+    const a = new Audio('sounds/' + name + '.m4a');
+    a.volume = vol;
+    a.play().catch(()=>{});
+  } catch(e) {}
+}
+function playClickSound() {
+  playSound('click' + (Math.floor(Math.random()*3)+1), 0.6);
+}
+// Intro chord plays on first user interaction (browser autoplay policy)
+let _introPlayed = false;
+function _playIntro() {
+  if(_introPlayed) return; _introPlayed = true;
+  playSound('intro-chord', 0.5);
+}
+document.addEventListener('pointerdown', _playIntro, { once:true });
 
 // ── PING ─────────────────────────────────────────────────────────
 window.spawnPing = function(cx,cy) {
@@ -2446,6 +2470,7 @@ function scheduleFlip() {
 
     btn.addEventListener('click',e=>{
       if(!isHost&&!hostConn?.open) return;
+      playClickSound();
       btn.classList.remove('rolling'); void btn.offsetWidth;
       btn.classList.add('rolling');
       btn.addEventListener('animationend',()=>btn.classList.remove('rolling'),{once:true});
