@@ -2300,7 +2300,7 @@ function aoeDistLabel(svg,x1,y1,x2,y2){
 }
 
 // ── PENCIL DRAW ───────────────────────────────────────────────────
-let drawCtx=null, drawPainting=false, drawColor='#111111', drawSize=4, drawLastX=0, drawLastY=0, drawEraser=false;
+let drawCtx=null, drawPainting=false, drawColor='#111111', drawSize=4, drawLastX=0, drawLastY=0, drawEraser=false, drawThrottle=0;
 
 function applyErase(x, y, size=50) {
   if(!drawCtx) return;
@@ -2630,15 +2630,28 @@ function scheduleFlip() {
       eraserCursor.style.left=e.clientX+'px'; eraserCursor.style.top=e.clientY+'px';
     }
     if(!drawPainting) return;
+    const now=performance.now();
     if(drawEraser){
       const {x,y}=toCanvas(e);
-      send({type:'draw_erase',x,y,size:50});
+      applyErase(x,y,50); // local every frame — smooth for host
+      if(now-drawThrottle>=50){ // broadcast at 20/sec
+        drawThrottle=now;
+        const msg={type:'draw_erase',x,y,size:50};
+        S.drawStrokes.push({...msg});
+        if(isHost) broadcast(msg,null); else if(hostConn?.open) hostConn.send(msg);
+      }
     } else {
       const {x,y}=toCanvas(e);
       if(x===drawLastX&&y===drawLastY) return;
       const seg={x1:drawLastX,y1:drawLastY,x2:x,y2:y,color:drawColor,size:drawSize};
-      send({type:'draw_segment',...seg});
+      _drawSeg(seg); // local every frame — smooth for host
       drawLastX=x; drawLastY=y;
+      if(now-drawThrottle>=50){ // broadcast at 20/sec
+        drawThrottle=now;
+        const msg={type:'draw_segment',...seg};
+        S.drawStrokes.push(msg);
+        if(isHost) broadcast(msg,null); else if(hostConn?.open) hostConn.send(msg);
+      }
     }
   });
   pc.addEventListener('pointerleave',()=>{ eraserCursor.style.display='none'; });
