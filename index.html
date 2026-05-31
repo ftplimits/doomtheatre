@@ -1040,6 +1040,8 @@ body.combat #aoe-layer { display:block; }
   <div class="cm-item" data-cur="quill">✒ Quill</div>
   <div class="cm-item" data-cur="arcane">🖐 Necrotic Grasp</div>
   <div class="cm-item" data-cur="skull">💀 Gnoll Skull</div>
+  <div style="height:1px;background:var(--border);margin:3px 0"></div>
+  <div class="cm-item" id="cm-clear-init">✕ Clear Initiative</div>
 </div>
 <!-- RENAME PROMPT -->
 <div id="rename-prompt">
@@ -1653,6 +1655,10 @@ function handleMsg(msg,fromConn) {
       });
       if(isHost) broadcast(msg,fromConn); break;
     }
+    case 'clear_initiative':
+      [...S.players,...S.npcs].forEach(o=>{ delete o.initiative; delete o._initRank; });
+      recalcInitiative();
+      if(isHost) broadcast(msg,fromConn); break;
     case 'set_initiative': {
       const arr2=msg.entityType==='player'?S.players:S.npcs;
       const ob2=arr2.find(o=>o.id===msg.id);
@@ -2832,8 +2838,16 @@ function scheduleFlip() {
     cursorMenu.classList.add('open');
   });
   document.addEventListener('click', ()=>cursorMenu.classList.remove('open'));
-  document.querySelectorAll('.cm-item').forEach(item=>{
+  document.querySelectorAll('.cm-item[data-cur]').forEach(item=>{
     item.addEventListener('click', ()=>{ applyCursor(item.dataset.cur); cursorMenu.classList.remove('open'); });
+  });
+  const cmClearInit = el('cm-clear-init');
+  if(!isHost) cmClearInit.style.display='none';
+  cmClearInit.addEventListener('click',()=>{
+    [...S.players,...S.npcs].forEach(o=>{ delete o.initiative; delete o._initRank; });
+    recalcInitiative();
+    send({type:'clear_initiative'});
+    cursorMenu.classList.remove('open');
   });
 
   // ── RENAME MODAL ──────────────────────────────────────────────────
