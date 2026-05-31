@@ -1460,22 +1460,28 @@ function renderLowerZone() {
 
 // ── COMBAT ───────────────────────────────────────────────────────
 function assignCombatPositions() {
-  // 3 cells in from each edge at CELL=120px
-  const playerX = 2 * CELL;          // 240px — 3rd column from left
-  const npcX    = (COLS - 3) * CELL; // 1560px — 3rd column from right
+  const playerX = 2 * CELL;
+  const npcX    = (COLS - 3) * CELL;
 
-  S.players.forEach((p,i)=>{
+  let pY = 0;
+  const pTotalH = S.players.reduce((h,p)=>(h+(p.size==='large'?2*CELL:CELL)), 0);
+  pY = clamp(snap(GRID_H/2 - pTotalH/2), 0, GRID_H - CELL);
+  S.players.forEach(p=>{
     if(p.cx==null){
-      const totalH=S.players.length*CELL;
-      p.cx=playerX;
-      p.cy=clamp(snap(GRID_H/2)-snap(totalH/2)+i*CELL, 0, GRID_H-CELL);
+      const h = p.size==='large' ? 2*CELL : CELL;
+      p.cx = playerX; p.cy = clamp(pY, 0, GRID_H-h);
+      pY += h;
     }
   });
-  S.npcs.forEach((n,i)=>{
+
+  let nY = 0;
+  const nTotalH = S.npcs.reduce((h,n)=>(h+(n.size==='large'?2*CELL:CELL)), 0);
+  nY = clamp(snap(GRID_H/2 - nTotalH/2), 0, GRID_H - CELL);
+  S.npcs.forEach(n=>{
     if(n.cx==null){
-      const totalH=S.npcs.length*CELL;
-      n.cx=npcX;
-      n.cy=clamp(snap(GRID_H/2)-snap(totalH/2)+i*CELL, 0, GRID_H-CELL);
+      const h = n.size==='large' ? 2*CELL : CELL;
+      n.cx = npcX; n.cy = clamp(nY, 0, GRID_H-h);
+      nY += h;
     }
   });
 }
@@ -1493,14 +1499,14 @@ function makeCombatAv(obj, entityType, idx) {
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
 
-  // Name bar lives in wrap (not frame) so it stays full-width regardless of frame size
+  _applyAvatarStyle(frame, obj);
+  wrap.appendChild(frame);
+
+  // Name bar AFTER frame so it sits below the avatar image in the flex column
   if(obj.name){
     const bar=document.createElement('div'); bar.className='ca-name-bar';
     bar.textContent=obj.name; wrap.appendChild(bar);
   }
-  _applyAvatarStyle(frame, obj);
-
-  wrap.appendChild(frame);
   if(isHost){
     frame.addEventListener('mousedown',e=>{
       if(e.button!==0) return;
@@ -1554,7 +1560,9 @@ function enterCombat() {
 }
 
 function exitCombat() {
-  // Combat avatars vanish immediately, but keep body.combat ON so zones stay hidden during un-dim
+  // Clear all combat positions — next entry recalculates from scratch
+  [...S.players, ...S.npcs].forEach(o=>{ o.cx=null; o.cy=null; });
+
   el('combat-arena').innerHTML = '';
 
   const ov = el('transition-overlay');
