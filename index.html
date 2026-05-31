@@ -503,6 +503,28 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
   border-radius:4px; padding:2px 5px;
   pointer-events:none; text-shadow:none;
 }
+/* ── CURSOR MENU ── */
+#cursor-menu {
+  position:fixed; z-index:200; display:none;
+  background:var(--panel-bg); border:1px solid var(--border);
+  border-radius:8px; padding:4px 0;
+  box-shadow:0 4px 20px rgba(0,0,0,.85); min-width:168px;
+}
+#cursor-menu.open { display:block; }
+.cm-title {
+  font-family:'Cinzel',var(--font-display); font-size:8px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim);
+  padding:5px 14px 4px;
+}
+.cm-item {
+  font-family:'Cinzel',var(--font-display); font-size:10px;
+  color:var(--gold-dim); padding:5px 14px 5px 26px; cursor:pointer;
+  transition:color .1s,background .1s; position:relative;
+}
+.cm-item:hover  { color:var(--gold); background:rgba(200,169,110,.08); }
+.cm-item.active { color:var(--gold); }
+.cm-item.active::before { content:'✓'; position:absolute; left:10px; color:var(--gold); font-size:9px; }
+
 /* ── INITIATIVE & RENAME PROMPTS ── */
 #init-prompt, #rename-prompt {
   position:fixed; inset:0; z-index:10000; display:none;
@@ -892,6 +914,16 @@ body.combat #aoe-layer { display:block; }
   <button id="dm-eraser-btn">⬤ Eraser</button>
 </div>
 
+<!-- CURSOR MENU -->
+<div id="cursor-menu">
+  <div class="cm-title">Cursor Style</div>
+  <div class="cm-item active" data-cur="default">🖱 Default</div>
+  <div class="cm-item" data-cur="dagger">🗡 Dagger</div>
+  <div class="cm-item" data-cur="crosshair">✦ Runic Crosshair</div>
+  <div class="cm-item" data-cur="quill">✒ Quill</div>
+  <div class="cm-item" data-cur="arcane">✨ Arcane Hand</div>
+  <div class="cm-item" data-cur="skull">💀 Gnoll Skull</div>
+</div>
 <!-- RENAME PROMPT -->
 <div id="rename-prompt">
   <div class="init-prompt-box">
@@ -1931,6 +1963,26 @@ setTimeout(()=>{
   });
 }, 400);
 
+// ── CUSTOM CURSORS ───────────────────────────────────────────────
+const CURSOR_DEFS = {
+  default: null,
+  dagger: { hx:16, hy:0, svg:`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><polygon points='16,0 18.5,18 16,22 13.5,18' fill='%23c8c8d8' stroke='%23555' stroke-width='0.5'/><line x1='16' y1='2' x2='16' y2='17' stroke='%23888' stroke-width='0.7' opacity='0.7'/><rect x='10' y='18' width='12' height='3' rx='1.5' fill='%238b7355'/><rect x='13' y='20' width='6' height='8' rx='1' fill='%234a2e10'/><line x1='13' y1='22.5' x2='19' y2='22.5' stroke='%232a1800' stroke-width='0.7'/><line x1='13' y1='25' x2='19' y2='25' stroke='%232a1800' stroke-width='0.7'/><ellipse cx='16' cy='29' rx='4' ry='3' fill='%238b7355'/></svg>` },
+  crosshair: { hx:16, hy:16, svg:`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='none' stroke='%23c8a96e' stroke-width='1' stroke-dasharray='4 3'/><circle cx='16' cy='16' r='4' fill='none' stroke='%23c8a96e' stroke-width='0.8'/><line x1='2' y1='16' x2='11' y2='16' stroke='%23c8a96e' stroke-width='1'/><line x1='21' y1='16' x2='30' y2='16' stroke='%23c8a96e' stroke-width='1'/><line x1='16' y1='2' x2='16' y2='11' stroke='%23c8a96e' stroke-width='1'/><line x1='16' y1='21' x2='16' y2='30' stroke='%23c8a96e' stroke-width='1'/><circle cx='16' cy='16' r='1.5' fill='%23c8a96e'/></svg>` },
+  quill: { hx:2, hy:30, svg:`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><path d='M30,1 Q22,6 16,18' fill='none' stroke='%23e8e0c8' stroke-width='2.5' stroke-linecap='round'/><path d='M30,1 Q24,8 18,20' fill='none' stroke='%23d0c8b0' stroke-width='1.5' stroke-linecap='round' opacity='0.6'/><line x1='30' y1='1' x2='5' y2='28' stroke='%23c8b890' stroke-width='0.8'/><path d='M7,26 L2,32 L8,28 Z' fill='%23c8a96e'/></svg>` },
+  arcane: { hx:16, hy:1, svg:`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect x='12' y='10' width='8' height='14' rx='3' fill='%23c8956a'/><rect x='8' y='12' width='6' height='12' rx='3' fill='%23c8956a'/><rect x='18' y='12' width='6' height='12' rx='3' fill='%23c8956a'/><rect x='13' y='2' width='6' height='11' rx='3' fill='%23c8956a'/><rect x='8' y='22' width='6' height='6' rx='2' fill='%23c8956a'/><rect x='18' y='22' width='6' height='6' rx='2' fill='%23c8956a'/><circle cx='16' cy='2' r='5' fill='%237733cc' opacity='0.5'/><circle cx='16' cy='2' r='3' fill='%23aa66ff' opacity='0.85'/><circle cx='16' cy='2' r='1.5' fill='%23ffffff' opacity='0.95'/></svg>` },
+  skull: { hx:16, hy:13, svg:`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><ellipse cx='16' cy='13' rx='12' ry='11' fill='%23d8d0be' stroke='%23555' stroke-width='0.7'/><rect x='8' y='21' width='16' height='7' rx='2' fill='%23d8d0be' stroke='%23555' stroke-width='0.7'/><rect x='9' y='26' width='4' height='5' rx='1' fill='%23f5f0e8'/><rect x='14' y='26' width='4' height='5' rx='1' fill='%23f5f0e8'/><rect x='19' y='26' width='4' height='5' rx='1' fill='%23f5f0e8'/><ellipse cx='11' cy='12' rx='3.5' ry='4' fill='%231a0a0a'/><ellipse cx='21' cy='12' rx='3.5' ry='4' fill='%231a0a0a'/><path d='M14,18 L16,15 L18,18 Z' fill='%231a0a0a'/></svg>` },
+};
+
+let activeCursorKey = 'default';
+function applyCursor(key) {
+  activeCursorKey = key;
+  const def = CURSOR_DEFS[key];
+  el('scene').style.cursor = def
+    ? `url("data:image/svg+xml,${def.svg}") ${def.hx} ${def.hy}, auto`
+    : '';
+  document.querySelectorAll('.cm-item').forEach(i=>i.classList.toggle('active', i.dataset.cur===key));
+}
+
 // ── PING ─────────────────────────────────────────────────────────
 window.spawnPing = function(cx,cy) {
   const svg=el('ping-layer'); if(!svg) return;
@@ -2476,6 +2528,21 @@ function scheduleFlip() {
     diceVisible=!diceVisible;
     el('dice-row').style.display=diceVisible?'':'none';
     el('dice-toggle').textContent=diceVisible?'▼':'▲';
+  });
+
+  // ── CURSOR MENU (right-click backdrop) ───────────────────────────
+  const cursorMenu = el('cursor-menu');
+  el('scene').addEventListener('contextmenu', e=>{
+    if(aoeActive || document.body.classList.contains('draw-mode')) return;
+    if(e.target.closest('.av-wrap,.ca-wrap,.av-frame,.ca-frame,#dm-avatar-wrap,#toolbar,#ctx-menu,#dice-row,#bottom-bar')) return;
+    e.preventDefault(); e.stopPropagation();
+    cursorMenu.style.left = e.clientX+'px';
+    cursorMenu.style.top  = e.clientY+'px';
+    cursorMenu.classList.add('open');
+  });
+  document.addEventListener('click', ()=>cursorMenu.classList.remove('open'));
+  document.querySelectorAll('.cm-item').forEach(item=>{
+    item.addEventListener('click', ()=>{ applyCursor(item.dataset.cur); cursorMenu.classList.remove('open'); });
   });
 
   // ── RENAME MODAL ──────────────────────────────────────────────────
