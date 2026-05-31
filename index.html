@@ -299,7 +299,6 @@ body.panel-open #dice-log { right:301px; }
 .log-entry { font-family:'Cinzel',var(--font-display); font-size:17px; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,1); text-align:right; white-space:nowrap; animation:log-in .2s ease both; }
 .log-entry.old { color:var(--gold-dim); font-size:15px; }
 /* ── DARK DICE COLOUR LOG PILL ── */
-.log-entry.dark-palette { background:rgba(255,255,255,0.88); border-radius:4px; padding:1px 8px; }
 
 /* ── BLOOD LAYER ── */
 #blood-layer { position:absolute; inset:0; z-index:2; pointer-events:none; }
@@ -1328,6 +1327,11 @@ function handleMsg(msg,fromConn) {
     case 'ping':       if(window.spawnPing) window.spawnPing(msg.cx,msg.cy); if(isHost) broadcast(msg,fromConn); break;
     case 'add_aoe':    S.aoeShapes.push(msg.shape); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'remove_aoe': S.aoeShapes=S.aoeShapes.filter(s=>s.id!==msg.id); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
+    case 'move_aoe': {
+      const sh=S.aoeShapes.find(s=>s.id===msg.id);
+      if(sh){ sh.x1=msg.x1; sh.y1=msg.y1; sh.x2=msg.x2; sh.y2=msg.y2; renderAoeLayer(); }
+      if(isHost) broadcast(msg,fromConn); break;
+    }
     case 'clear_aoe':  S.aoeShapes=[]; renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'blood_splat':
       if(window.spawnBloodAt) window.spawnBloodAt(msg.cx,msg.cy);
@@ -1875,7 +1879,34 @@ function renderAoeLayer() {
     path.dataset.aoeId=shape.id;
     if(isHost){
       path.style.pointerEvents='all';
+      path.style.cursor='grab';
+      // Right-click = remove; left drag = move
       path.addEventListener('contextmenu',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'remove_aoe',id:shape.id}); });
+      path.addEventListener('pointerdown',e=>{
+        if(e.button!==0||aoeActive) return; // only when no tool selected
+        e.preventDefault(); e.stopPropagation();
+        path.setPointerCapture(e.pointerId);
+        const startCanvas = toCanvas(e);
+        let moved = false;
+        const origX1=shape.x1, origY1=shape.y1, origX2=shape.x2, origY2=shape.y2;
+        function onMove(ev) {
+          const cur = toCanvas(ev);
+          const dx = cur.x - startCanvas.x, dy = cur.y - startCanvas.y;
+          if(Math.hypot(dx,dy) > 4) moved = true;
+          if(moved) path.setAttribute('transform', `translate(${dx},${dy})`);
+        }
+        function onUp(ev) {
+          path.removeEventListener('pointermove', onMove);
+          path.removeEventListener('pointerup', onUp);
+          if(!moved) return;
+          const cur = toCanvas(ev);
+          const dx = snap(cur.x - startCanvas.x), dy = snap(cur.y - startCanvas.y);
+          path.removeAttribute('transform');
+          send({type:'move_aoe',id:shape.id, x1:origX1+dx,y1:origY1+dy, x2:origX2+dx,y2:origY2+dy});
+        }
+        path.addEventListener('pointermove', onMove);
+        path.addEventListener('pointerup', onUp);
+      });
     }
     svg.appendChild(path);
   });
@@ -2446,12 +2477,11 @@ function scheduleFlip() {
     if(isHost) send({type:'clear_aoe'});
   });
 
-  // Right-click canvas while AoE active → deselect tool AND clear placed shapes
+  // Right-click canvas while AoE tool active → deselect tool only (keep placed shapes)
   el('canvas').addEventListener('contextmenu',e=>{
     if(!aoeActive) return;
     e.preventDefault(); e.stopPropagation();
     clearAoeTool();
-    if(isHost) send({type:'clear_aoe'});
   });
 
   // AoE drawing on canvas (bubble phase is fine — ca-frame handler checks aoeActive)
