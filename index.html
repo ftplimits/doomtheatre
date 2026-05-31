@@ -375,6 +375,66 @@ body.panel-open #weather-menu { right:294px; }
 body.discord-mode #test-panel  { display:none !important; }
 body.discord-mode .browser-only { display:none !important; }
 
+/* ── INTRO BANNER ── */
+#intro-banner {
+  position:fixed; inset:0; z-index:10000; pointer-events:none;
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(ellipse 120% 100% at 50% 50%,
+      #a80012 0%, #6e0010 25%, #2a0005 55%, #000 100%);
+  animation: ib-fade 3.6s ease forwards;
+}
+@keyframes ib-fade {
+  0%      { opacity:1; }
+  60%     { opacity:1; }
+  100%    { opacity:0; }
+}
+.ib-frame {
+  position:relative; text-align:center;
+  padding:52px 80px;
+  border:1px solid rgba(200,169,110,.35);
+  box-shadow:
+    0 0 0 6px rgba(80,0,0,.5),
+    0 0 0 7px rgba(200,169,110,.15),
+    0 0 80px rgba(139,0,0,.6),
+    inset 0 0 100px rgba(0,0,0,.4);
+}
+.ib-corner {
+  position:absolute; width:18px; height:18px;
+  border-color:rgba(200,169,110,.7);
+  border-style:solid;
+}
+.ib-tl { top:-1px; left:-1px; border-width:2px 0 0 2px; }
+.ib-tr { top:-1px; right:-1px; border-width:2px 2px 0 0; }
+.ib-bl { bottom:-1px; left:-1px; border-width:0 0 2px 2px; }
+.ib-br { bottom:-1px; right:-1px; border-width:0 2px 2px 0; }
+.ib-ornament {
+  font-size:16px; letter-spacing:.4em; margin-bottom:12px;
+  color:rgba(200,169,110,.55);
+}
+.ib-rule {
+  height:1px; margin:18px auto;
+  background:linear-gradient(90deg,transparent,rgba(200,169,110,.65),transparent);
+}
+.ib-title {
+  font-family:'Cinzel',var(--font-display);
+  font-size:clamp(52px,9vw,110px);
+  font-weight:900; letter-spacing:.22em; line-height:1.08;
+  color:#fff;
+  text-shadow:
+    0 0 30px rgba(180,0,20,.95),
+    0 0 70px rgba(139,0,0,.7),
+    0 0 120px rgba(100,0,0,.4),
+    0 2px 4px rgba(0,0,0,.8);
+  margin:0;
+}
+.ib-sub {
+  font-family:'Cinzel',var(--font-display);
+  font-size:clamp(10px,1.6vw,15px);
+  letter-spacing:.55em; color:rgba(200,169,110,.65);
+  margin:0; text-transform:uppercase;
+}
+
 /* ── CLOUD SAVE / LOAD MENUS ── */
 #save-menu, #load-menu {
   position:fixed; z-index:35; display:none;
@@ -756,7 +816,21 @@ body.combat #aoe-layer { display:block; }
 <!-- ERASER CURSOR -->
 <div id="eraser-cursor"></div>
 
-<!-- SAVE MENU -->
+<!-- INTRO BANNER -->
+<div id="intro-banner">
+  <div class="ib-frame">
+    <div class="ib-corner ib-tl"></div>
+    <div class="ib-corner ib-tr"></div>
+    <div class="ib-corner ib-bl"></div>
+    <div class="ib-corner ib-br"></div>
+    <div class="ib-ornament">⚔ &nbsp; ✦ &nbsp; ⚔</div>
+    <div class="ib-rule"></div>
+    <div class="ib-title">GNOLL<br>THEATRE</div>
+    <div class="ib-rule"></div>
+    <p class="ib-sub">Theatre &nbsp;of &nbsp;the &nbsp;Mind</p>
+    <div class="ib-ornament" style="margin-top:14px;margin-bottom:0">⚔ &nbsp; ✦ &nbsp; ⚔</div>
+  </div>
+</div>
 <div id="save-menu">
   <div class="dm-label">Save Name</div>
   <input id="save-name-input" type="text" placeholder="e.g. Session 5 — Crypt" maxlength="40">
@@ -1613,13 +1687,18 @@ function playSound(name, vol=1) {
 function playClickSound() {
   playSound('click' + (Math.floor(Math.random()*3)+1), 0.6);
 }
-// Intro chord plays on first user interaction (browser autoplay policy)
-let _introPlayed = false;
-function _playIntro() {
-  if(_introPlayed) return; _introPlayed = true;
-  playSound('intro-chord', 0.5);
-}
-document.addEventListener('pointerdown', _playIntro, { once:true });
+// Preload intro chord immediately so it's cached and ready
+const _introAudio = new Audio('sounds/intro-chord.m4a');
+_introAudio.preload = 'auto'; _introAudio.volume = 0.5; _introAudio.load();
+// Try autoplay after a short load window (Discord Activity iframe inherits autoplay permission)
+setTimeout(()=>{
+  _introAudio.play().catch(()=>{
+    // Autoplay blocked — fire on first interaction instead
+    document.addEventListener('pointerdown', ()=>{
+      if(_introAudio.paused){ _introAudio.currentTime=0; _introAudio.play().catch(()=>{}); }
+    }, {once:true});
+  });
+}, 400);
 
 // ── PING ─────────────────────────────────────────────────────────
 window.spawnPing = function(cx,cy) {
@@ -2205,6 +2284,10 @@ function scheduleFlip() {
       });
     } catch(err) { list.innerHTML = '<div id="load-empty">✗ ' + err.message + '</div>'; }
   });
+
+  // Hide intro banner after animation (prevents blocking clicks after fade)
+  const introBanner = el('intro-banner');
+  if(introBanner) setTimeout(()=>{ introBanner.style.display='none'; }, 3700);
 
   // Clear speak-as-NPC on mouse release or shift key release
   document.addEventListener('mouseup', ()=>{ if(speakingAsAvatar) clearShiftNpc(); });
