@@ -1536,11 +1536,11 @@ function handleMsg(msg,fromConn) {
       const arr=msg.entityType==='player'?S.players:S.npcs;
       const obj=arr.find(o=>o.id===msg.id);
       if(obj){ obj.cx=msg.cx; obj.cy=msg.cy; }
-      // Move just this token in the DOM — no full re-render, no animation replay
-      const frame=document.querySelector(`[data-av-id="${msg.id}"]`);
+      // Scope to combat-arena — theatre mode also sets data-av-id on frames and querySelector finds those first
+      const arena=el('combat-arena');
+      const frame=arena?arena.querySelector(`[data-av-id="${msg.id}"]`):null;
       if(frame){ const wrap=frame.closest('.ca-wrap'); if(wrap){ wrap.style.left=msg.cx+'px'; wrap.style.top=msg.cy+'px'; } }
-      if(isHost) broadcast(msg,fromConn);
-      break;
+      if(isHost) broadcast(msg,fromConn); break;
     }
     case 'flip_avatar': {
       if(msg.id==='__dm__') {
