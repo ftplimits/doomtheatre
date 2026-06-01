@@ -1831,15 +1831,17 @@ function makeCombatAv(obj, entityType, idx) {
   }
   if(isHost){
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
-    frame.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
+    frame.addEventListener('dblclick',e=>{ console.log('[DEBUG] ca-frame dblclick | isHost:',isHost,'| id:',obj.id); e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
     // Combat drag — document-level pointer events, no setPointerCapture (iframe-safe)
     wrap.addEventListener('pointerdown',e=>{
+      console.log('[DEBUG] ca-wrap pointerdown | button:',e.button,'| isHost:',isHost,'| id:',obj.id);
       if(e.button!==0) return;
       if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
       if(e.shiftKey&&isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
       if(aoeActive) return;
       e.stopPropagation();
       const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
+      console.log('[DEBUG] drag start | sc:',sc,'| sCX:',sCX,'| sCY:',sCY);
       wrap.classList.add('dragging');
       function onMove(ev){
         const {x,y}=toCanvas(ev);
@@ -1866,11 +1868,13 @@ function makeCombatAv(obj, entityType, idx) {
         wrap.style.left=cx+'px'; wrap.style.top=cy+'px';
         wrap.classList.remove('dragging');
         obj.cx=cx; obj.cy=cy;
+        console.log('[DEBUG] drag end | cx:',cx,'| cy:',cy);
         send({type:'combat_move',entityType,id:obj.id,cx,cy});
       }
       document.addEventListener('pointermove',onMove);
       document.addEventListener('pointerup',onUp);
     });
+    wrap.addEventListener('mousedown', e=>console.log('[DEBUG] ca-wrap mousedown | button:',e.button,'| isHost:',isHost));
   }
   return wrap;
 }
@@ -2295,8 +2299,9 @@ function renderAoeLayer() {
       path.style.pointerEvents='all';
       path.style.cursor='grab';
       // Right-click = remove; left drag = move
-      path.addEventListener('contextmenu',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'remove_aoe',id:shape.id}); });
+      path.addEventListener('contextmenu',e=>{ console.log('[DEBUG] AoE contextmenu | isHost:',isHost,'| id:',shape.id); e.preventDefault(); e.stopPropagation(); send({type:'remove_aoe',id:shape.id}); });
       path.addEventListener('pointerdown',e=>{
+        console.log('[DEBUG] AoE pointerdown | button:',e.button,'| isHost:',isHost,'| aoeActive:',aoeActive,'| id:',shape.id);
         if(e.button!==0||aoeActive) return; // only when no tool selected
         e.preventDefault(); e.stopPropagation();
         path.setPointerCapture(e.pointerId);
@@ -2944,6 +2949,22 @@ function scheduleFlip() {
   // Clear speak-as-NPC on mouse release or shift key release
   document.addEventListener('mouseup', ()=>{ if(speakingAsAvatar) clearShiftNpc(); });
   document.addEventListener('keyup',   e=>{ if(e.key==='Shift'&&speakingAsAvatar) clearShiftNpc(); });
+
+  // Debug: press Shift+D to dump combat state to console
+  document.addEventListener('keydown',e=>{
+    if(e.key==='D'&&e.shiftKey){
+      const arena=el('combat-arena');
+      const wraps=arena.querySelectorAll('.ca-wrap');
+      console.log('[DEBUG] isHost:',isHost,'| combatMode:',S.combatMode,'| ca-wrap count:',wraps.length);
+      console.log('[DEBUG] combat-arena style:',window.getComputedStyle(arena).pointerEvents);
+      if(wraps.length>0){
+        const w=wraps[0];
+        console.log('[DEBUG] first ca-wrap computed pointer-events:',window.getComputedStyle(w).pointerEvents);
+        console.log('[DEBUG] first ca-wrap rect:',JSON.stringify(w.getBoundingClientRect()));
+      }
+      console.log('[DEBUG] S.players:',JSON.stringify(S.players.map(p=>({id:p.id,cx:p.cx,cy:p.cy}))));
+    }
+  });
 
   // ── ZONE SWAP (drag player ↔ npc between rows) ──────────────────
   ['upper-zone','lower-zone'].forEach(zid=>{
