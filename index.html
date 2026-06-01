@@ -1830,51 +1830,52 @@ function makeCombatAv(obj, entityType, idx) {
     const bar=document.createElement('div'); bar.className='ca-name-bar';
     bar.textContent=obj.name; wrap.appendChild(bar);
   }
+  // Host-only: right-click context menu
   if(isHost){
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
-    frame.addEventListener('dblclick',e=>{ console.log('[DEBUG] ca-frame dblclick | isHost:',isHost,'| id:',obj.id); e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
-    // Combat drag on FRAME (not wrap) — pointerdown reliably lands here
-    frame.addEventListener('pointerdown',e=>{
-      console.log('[DEBUG] ca-frame pointerdown | button:',e.button,'| isHost:',isHost,'| id:',obj.id);
-      if(e.button!==0) return;
-      if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
-      if(e.shiftKey&&isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
-      if(aoeActive) return;
-      const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
-      console.log('[DEBUG] drag start | sc:',sc,'| sCX:',sCX,'| sCY:',sCY);
-      wrap.classList.add('dragging');
-      function onMove(ev){
-        const {x,y}=toCanvas(ev);
-        const rawX=sCX+(x-sc.x), rawY=sCY+(y-sc.y);
-        wrap.style.left=rawX+'px'; wrap.style.top=rawY+'px';
-        const half=CELL/2, sx=sCX+half, sy=sCY+half, ex=rawX+half, ey=rawY+half;
-        const dxSq=(rawX-sCX)/CELL, dySq=(rawY-sCY)/CELL;
-        const dist=Math.round(Math.sqrt(dxSq*dxSq+dySq*dySq));
-        const msv=el('measure-svg');
-        if(dist>0){
-          const ft=dist*5, lw=ft>=100?76:ft>=10?66:56, mx=(sx+ex)/2, my=(sy+ey)/2;
-          msv.style.display='block';
-          msv.innerHTML=`<circle cx="${sx}" cy="${sy}" r="6" fill="rgba(200,169,110,0.75)"/><line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="rgba(200,169,110,0.75)" stroke-width="2" stroke-dasharray="10 5"/><circle cx="${ex}" cy="${ey}" r="6" fill="rgba(200,169,110,0.75)"/><rect x="${mx-lw/2}" y="${my-13}" width="${lw}" height="24" rx="5" fill="rgba(0,0,0,0.8)"/><text x="${mx}" y="${my+6}" text-anchor="middle" font-family="Cinzel,serif" font-size="14" font-weight="700" fill="#c8a96e" letter-spacing="0.5">${ft} ft</text>`;
-        } else msv.style.display='none';
-      }
-      function onUp(ev){
-        document.removeEventListener('pointermove',onMove);
-        document.removeEventListener('pointerup',onUp);
-        el('measure-svg').style.display='none'; el('measure-svg').innerHTML='';
-        const {x,y}=toCanvas(ev);
-        const isLarge=obj.size==='large';
-        const cx=clamp(snap(sCX+(x-sc.x)),0,isLarge?GRID_W-2*CELL:GRID_W-CELL);
-        const cy=clamp(snap(sCY+(y-sc.y)),0,isLarge?GRID_H-2*CELL:GRID_H-CELL);
-        wrap.style.left=cx+'px'; wrap.style.top=cy+'px';
-        wrap.classList.remove('dragging');
-        obj.cx=cx; obj.cy=cy;
-        console.log('[DEBUG] drag end | cx:',cx,'| cy:',cy);
-        send({type:'combat_move',entityType,id:obj.id,cx,cy});
-      }
-      document.addEventListener('pointermove',onMove);
-      document.addEventListener('pointerup',onUp);
-    });
   }
+  // All players: dblclick to flip, pointerdown to drag
+  frame.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
+  frame.addEventListener('pointerdown',e=>{
+    console.log('[DEBUG] ca-frame pointerdown | button:',e.button,'| isHost:',isHost,'| id:',obj.id);
+    if(e.button!==0) return;
+    if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
+    if(e.shiftKey&&isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
+    if(aoeActive) return;
+    const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
+    console.log('[DEBUG] drag start | sc:',sc,'| sCX:',sCX,'| sCY:',sCY);
+    wrap.classList.add('dragging');
+    function onMove(ev){
+      const {x,y}=toCanvas(ev);
+      const rawX=sCX+(x-sc.x), rawY=sCY+(y-sc.y);
+      wrap.style.left=rawX+'px'; wrap.style.top=rawY+'px';
+      const half=CELL/2, sx=sCX+half, sy=sCY+half, ex=rawX+half, ey=rawY+half;
+      const dxSq=(rawX-sCX)/CELL, dySq=(rawY-sCY)/CELL;
+      const dist=Math.round(Math.sqrt(dxSq*dxSq+dySq*dySq));
+      const msv=el('measure-svg');
+      if(dist>0){
+        const ft=dist*5, lw=ft>=100?76:ft>=10?66:56, mx=(sx+ex)/2, my=(sy+ey)/2;
+        msv.style.display='block';
+        msv.innerHTML=`<circle cx="${sx}" cy="${sy}" r="6" fill="rgba(200,169,110,0.75)"/><line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="rgba(200,169,110,0.75)" stroke-width="2" stroke-dasharray="10 5"/><circle cx="${ex}" cy="${ey}" r="6" fill="rgba(200,169,110,0.75)"/><rect x="${mx-lw/2}" y="${my-13}" width="${lw}" height="24" rx="5" fill="rgba(0,0,0,0.8)"/><text x="${mx}" y="${my+6}" text-anchor="middle" font-family="Cinzel,serif" font-size="14" font-weight="700" fill="#c8a96e" letter-spacing="0.5">${ft} ft</text>`;
+      } else msv.style.display='none';
+    }
+    function onUp(ev){
+      document.removeEventListener('pointermove',onMove);
+      document.removeEventListener('pointerup',onUp);
+      el('measure-svg').style.display='none'; el('measure-svg').innerHTML='';
+      const {x,y}=toCanvas(ev);
+      const isLarge=obj.size==='large';
+      const cx=clamp(snap(sCX+(x-sc.x)),0,isLarge?GRID_W-2*CELL:GRID_W-CELL);
+      const cy=clamp(snap(sCY+(y-sc.y)),0,isLarge?GRID_H-2*CELL:GRID_H-CELL);
+      wrap.style.left=cx+'px'; wrap.style.top=cy+'px';
+      wrap.classList.remove('dragging');
+      obj.cx=cx; obj.cy=cy;
+      console.log('[DEBUG] drag end | cx:',cx,'| cy:',cy);
+      send({type:'combat_move',entityType,id:obj.id,cx,cy});
+    }
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
+  });
   return wrap;
 }
 function renderCombatArena() {
@@ -2294,38 +2295,35 @@ function renderAoeLayer() {
     const path=aoeShapePath(shape); if(!path) return;
     styleAoeEl(path,shape.color,false,shape.type);
     path.dataset.aoeId=shape.id;
-    if(isHost){
-      path.style.pointerEvents='all';
-      path.style.cursor='grab';
-      // Right-click = remove; left drag = move
-      path.addEventListener('contextmenu',e=>{ console.log('[DEBUG] AoE contextmenu | isHost:',isHost,'| id:',shape.id); e.preventDefault(); e.stopPropagation(); send({type:'remove_aoe',id:shape.id}); });
-      path.addEventListener('pointerdown',e=>{
-        console.log('[DEBUG] AoE pointerdown | button:',e.button,'| isHost:',isHost,'| aoeActive:',aoeActive,'| id:',shape.id);
-        if(e.button!==0||aoeActive) return; // only when no tool selected
-        e.preventDefault(); e.stopPropagation();
-        path.setPointerCapture(e.pointerId);
-        const startCanvas = toCanvas(e);
-        let moved = false;
-        const origX1=shape.x1, origY1=shape.y1, origX2=shape.x2, origY2=shape.y2;
-        function onMove(ev) {
-          const cur = toCanvas(ev);
-          const dx = cur.x - startCanvas.x, dy = cur.y - startCanvas.y;
-          if(Math.hypot(dx,dy) > 4) moved = true;
-          if(moved) path.setAttribute('transform', `translate(${dx},${dy})`);
-        }
-        function onUp(ev) {
-          path.removeEventListener('pointermove', onMove);
-          path.removeEventListener('pointerup', onUp);
-          if(!moved) return;
-          const cur = toCanvas(ev);
-          const dx = snap(cur.x - startCanvas.x), dy = snap(cur.y - startCanvas.y);
-          path.removeAttribute('transform');
-          send({type:'move_aoe',id:shape.id, x1:origX1+dx,y1:origY1+dy, x2:origX2+dx,y2:origY2+dy});
-        }
-        path.addEventListener('pointermove', onMove);
-        path.addEventListener('pointerup', onUp);
-      });
-    }
+    path.style.pointerEvents='all';
+    path.style.cursor='grab';
+    // Right-click = remove; left drag = move — all players
+    path.addEventListener('contextmenu',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'remove_aoe',id:shape.id}); });
+    path.addEventListener('pointerdown',e=>{
+      if(e.button!==0||aoeActive) return;
+      e.preventDefault(); e.stopPropagation();
+      path.setPointerCapture(e.pointerId);
+      const startCanvas = toCanvas(e);
+      let moved = false;
+      const origX1=shape.x1, origY1=shape.y1, origX2=shape.x2, origY2=shape.y2;
+      function onMove(ev) {
+        const cur = toCanvas(ev);
+        const dx = cur.x - startCanvas.x, dy = cur.y - startCanvas.y;
+        if(Math.hypot(dx,dy) > 4) moved = true;
+        if(moved) path.setAttribute('transform', `translate(${dx},${dy})`);
+      }
+      function onUp(ev) {
+        path.removeEventListener('pointermove', onMove);
+        path.removeEventListener('pointerup', onUp);
+        if(!moved) return;
+        const cur = toCanvas(ev);
+        const dx = snap(cur.x - startCanvas.x), dy = snap(cur.y - startCanvas.y);
+        path.removeAttribute('transform');
+        send({type:'move_aoe',id:shape.id, x1:origX1+dx,y1:origY1+dy, x2:origX2+dx,y2:origY2+dy});
+      }
+      path.addEventListener('pointermove', onMove);
+      path.addEventListener('pointerup', onUp);
+    });
     svg.appendChild(path);
   });
 }
