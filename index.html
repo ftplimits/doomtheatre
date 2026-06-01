@@ -1535,7 +1535,7 @@ function handleMsg(msg,fromConn) {
     case 'combat_move': {
       const arr=msg.entityType==='player'?S.players:S.npcs;
       const obj=arr.find(o=>o.id===msg.id);
-      if(obj){ obj.cx=msg.cx; obj.cy=msg.cy; }
+      if(obj && !msg.preview){ obj.cx=msg.cx; obj.cy=msg.cy; } // S only on final drop
       // Scope to combat-arena — theatre mode also sets data-av-id on frames and querySelector finds those first
       const arena=el('combat-arena');
       const frame=arena?arena.querySelector(`[data-av-id="${msg.id}"]`):null;
@@ -1566,7 +1566,13 @@ function handleMsg(msg,fromConn) {
     case 'remove_aoe': S.aoeShapes=S.aoeShapes.filter(s=>s.id!==msg.id); renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'move_aoe': {
       const sh=S.aoeShapes.find(s=>s.id===msg.id);
-      if(sh){ sh.x1=msg.x1; sh.y1=msg.y1; sh.x2=msg.x2; sh.y2=msg.y2; renderAoeLayer(); }
+      if(msg.preview){
+        // Visual only — translate existing path without touching S or re-rendering
+        const pvPath=el('aoe-layer')?.querySelector(`[data-aoe-id="${msg.id}"]`);
+        if(pvPath && sh){ const dx=msg.x1-sh.x1, dy=msg.y1-sh.y1; pvPath.setAttribute('transform',`translate(${dx},${dy})`); }
+      } else {
+        if(sh){ sh.x1=msg.x1; sh.y1=msg.y1; sh.x2=msg.x2; sh.y2=msg.y2; renderAoeLayer(); }
+      }
       if(isHost) broadcast(msg,fromConn); break;
     }
     case 'clear_aoe':  S.aoeShapes=[]; renderAoeLayer(); if(isHost) broadcast(msg,fromConn); break;
@@ -1845,6 +1851,7 @@ function makeCombatAv(obj, entityType, idx) {
     const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
     console.log('[DEBUG] drag start | sc:',sc,'| sCX:',sCX,'| sCY:',sCY);
     wrap.classList.add('dragging');
+    let moveSendThrottle=0;
     function onMove(ev){
       const {x,y}=toCanvas(ev);
       const rawX=sCX+(x-sc.x), rawY=sCY+(y-sc.y);
@@ -1858,6 +1865,16 @@ function makeCombatAv(obj, entityType, idx) {
         msv.style.display='block';
         msv.innerHTML=`<circle cx="${sx}" cy="${sy}" r="6" fill="rgba(200,169,110,0.75)"/><line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="rgba(200,169,110,0.75)" stroke-width="2" stroke-dasharray="10 5"/><circle cx="${ex}" cy="${ey}" r="6" fill="rgba(200,169,110,0.75)"/><rect x="${mx-lw/2}" y="${my-13}" width="${lw}" height="24" rx="5" fill="rgba(0,0,0,0.8)"/><text x="${mx}" y="${my+6}" text-anchor="middle" font-family="Cinzel,serif" font-size="14" font-weight="700" fill="#c8a96e" letter-spacing="0.5">${ft} ft</text>`;
       } else msv.style.display='none';
+      // Throttled live position broadcast at 20/sec
+      const now=performance.now();
+      if(now-moveSendThrottle>=50){
+        moveSendThrottle=now;
+        const isLg=obj.size==='large';
+        const pvx=clamp(rawX,0,isLg?GRID_W-2*CELL:GRID_W-CELL);
+        const pvy=clamp(rawY,0,isLg?GRID_H-2*CELL:GRID_H-CELL);
+        const pvMsg={type:'combat_move',entityType,id:obj.id,cx:pvx,cy:pvy,preview:true};
+        if(isHost) broadcast(pvMsg,null); else if(hostConn?.open) hostConn.send(pvMsg);
+      }
     }
     function onUp(ev){
       document.removeEventListener('pointermove',onMove);
@@ -2306,11 +2323,19 @@ function renderAoeLayer() {
       const startCanvas = toCanvas(e);
       let moved = false;
       const origX1=shape.x1, origY1=shape.y1, origX2=shape.x2, origY2=shape.y2;
+      let aoeSendThrottle=0;
       function onMove(ev) {
         const cur = toCanvas(ev);
         const dx = cur.x - startCanvas.x, dy = cur.y - startCanvas.y;
         if(Math.hypot(dx,dy) > 4) moved = true;
         if(moved) path.setAttribute('transform', `translate(${dx},${dy})`);
+        // Throttled live position broadcast at 20/sec
+        const now=performance.now();
+        if(moved && now-aoeSendThrottle>=50){
+          aoeSendThrottle=now;
+          const pvMsg={type:'move_aoe',id:shape.id,x1:origX1+dx,y1:origY1+dy,x2:origX2+dx,y2:origY2+dy,preview:true};
+          if(isHost) broadcast(pvMsg,null); else if(hostConn?.open) hostConn.send(pvMsg);
+        }
       }
       function onUp(ev) {
         path.removeEventListener('pointermove', onMove);
