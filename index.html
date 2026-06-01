@@ -1833,14 +1833,13 @@ function makeCombatAv(obj, entityType, idx) {
   if(isHost){
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
     frame.addEventListener('dblclick',e=>{ console.log('[DEBUG] ca-frame dblclick | isHost:',isHost,'| id:',obj.id); e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
-    // Combat drag — document-level pointer events, no setPointerCapture (iframe-safe)
-    wrap.addEventListener('pointerdown',e=>{
-      console.log('[DEBUG] ca-wrap pointerdown | button:',e.button,'| isHost:',isHost,'| id:',obj.id);
+    // Combat drag on FRAME (not wrap) — pointerdown reliably lands here
+    frame.addEventListener('pointerdown',e=>{
+      console.log('[DEBUG] ca-frame pointerdown | button:',e.button,'| isHost:',isHost,'| id:',obj.id);
       if(e.button!==0) return;
       if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
       if(e.shiftKey&&isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
       if(aoeActive) return;
-      e.stopPropagation();
       const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
       console.log('[DEBUG] drag start | sc:',sc,'| sCX:',sCX,'| sCY:',sCY);
       wrap.classList.add('dragging');
@@ -1875,7 +1874,6 @@ function makeCombatAv(obj, entityType, idx) {
       document.addEventListener('pointermove',onMove);
       document.addEventListener('pointerup',onUp);
     });
-    wrap.addEventListener('mousedown', e=>console.log('[DEBUG] ca-wrap mousedown | button:',e.button,'| isHost:',isHost));
   }
   return wrap;
 }
