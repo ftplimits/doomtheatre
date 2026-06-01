@@ -1809,6 +1809,7 @@ function assignCombatPositions() {
 }
 
 function makeCombatAv(obj, entityType, idx) {
+  console.log('[DEBUG] makeCombatAv | isHost:',isHost,'| id:',obj.id,'| cx:',obj.cx,'| cy:',obj.cy);
   const wrap=document.createElement('div'); wrap.className='ca-wrap';
   wrap.dataset.entity=entityType;
   if(obj.size==='large') wrap.classList.add('ca-large');
@@ -1891,7 +1892,7 @@ function applyCombat() {
 }
 
 function enterCombat() {
-  // Clear arena before it becomes visible — no stale animations
+  console.log('[DEBUG] enterCombat called | isHost:',isHost,'| players:',S.players.length,'| npcs:',S.npcs.length);
   el('combat-arena').innerHTML = '';
   document.body.classList.add('combat');
 
@@ -2956,15 +2957,22 @@ function scheduleFlip() {
       const arena=el('combat-arena');
       const wraps=arena.querySelectorAll('.ca-wrap');
       console.log('[DEBUG] isHost:',isHost,'| combatMode:',S.combatMode,'| ca-wrap count:',wraps.length);
-      console.log('[DEBUG] combat-arena style:',window.getComputedStyle(arena).pointerEvents);
+      console.log('[DEBUG] combat-arena computed pointer-events:',window.getComputedStyle(arena).pointerEvents);
       if(wraps.length>0){
         const w=wraps[0];
         console.log('[DEBUG] first ca-wrap computed pointer-events:',window.getComputedStyle(w).pointerEvents);
         console.log('[DEBUG] first ca-wrap rect:',JSON.stringify(w.getBoundingClientRect()));
+        // Check what element is at the center of the first ca-wrap
+        const r=w.getBoundingClientRect();
+        const hit=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);
+        console.log('[DEBUG] elementFromPoint at ca-wrap center:', hit?.tagName, hit?.id, hit?.className);
       }
       console.log('[DEBUG] S.players:',JSON.stringify(S.players.map(p=>({id:p.id,cx:p.cx,cy:p.cy}))));
     }
   });
+  // Global event catch-all — fires for ANY click anywhere on the page
+  document.addEventListener('pointerdown', e=>console.log('[DEBUG] document pointerdown | target:',e.target?.tagName,e.target?.className?.toString().slice(0,40),'| isHost:',isHost), true);
+  document.addEventListener('click', e=>console.log('[DEBUG] document click | target:',e.target?.tagName,e.target?.className?.toString().slice(0,40)), true);
 
   // ── ZONE SWAP (drag player ↔ npc between rows) ──────────────────
   ['upper-zone','lower-zone'].forEach(zid=>{
