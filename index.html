@@ -117,7 +117,7 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 #combat-arena { position:absolute; inset:0; z-index:3; display:none; pointer-events:none; }
 body.combat #combat-arena { display:block; }
 
-.ca-wrap { position:absolute; width:120px; height:120px; pointer-events:all; cursor:grab; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+.ca-wrap { position:absolute; width:120px; height:120px; pointer-events:all; cursor:grab; touch-action:none; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
 .ca-wrap.dragging { cursor:grabbing; z-index:30; }
 .ca-wrap[data-entity="player"] { animation:ca-from-left  0.55s cubic-bezier(.34,1.3,.64,1) both; }
 .ca-wrap[data-entity="npc"]    { animation:ca-from-right 0.55s cubic-bezier(.34,1.3,.64,1) both; }
@@ -1832,14 +1832,13 @@ function makeCombatAv(obj, entityType, idx) {
   if(isHost){
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
     frame.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
-    // Combat drag — per-wrap pointer capture (works for all users, reliable in iframes)
+    // Combat drag — document-level pointer events, no setPointerCapture (iframe-safe)
     wrap.addEventListener('pointerdown',e=>{
       if(e.button!==0) return;
-      e.preventDefault();
       if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
       if(e.shiftKey&&isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
       if(aoeActive) return;
-      wrap.setPointerCapture(e.pointerId);
+      e.stopPropagation();
       const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
       wrap.classList.add('dragging');
       function onMove(ev){
@@ -1857,8 +1856,8 @@ function makeCombatAv(obj, entityType, idx) {
         } else msv.style.display='none';
       }
       function onUp(ev){
-        wrap.removeEventListener('pointermove',onMove);
-        wrap.removeEventListener('pointerup',onUp);
+        document.removeEventListener('pointermove',onMove);
+        document.removeEventListener('pointerup',onUp);
         el('measure-svg').style.display='none'; el('measure-svg').innerHTML='';
         const {x,y}=toCanvas(ev);
         const isLarge=obj.size==='large';
@@ -1869,8 +1868,8 @@ function makeCombatAv(obj, entityType, idx) {
         obj.cx=cx; obj.cy=cy;
         send({type:'combat_move',entityType,id:obj.id,cx,cy});
       }
-      wrap.addEventListener('pointermove',onMove);
-      wrap.addEventListener('pointerup',onUp);
+      document.addEventListener('pointermove',onMove);
+      document.addEventListener('pointerup',onUp);
     });
   }
   return wrap;
