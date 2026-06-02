@@ -2277,7 +2277,6 @@ function buildMusicPanel() {
       const row=document.createElement('div'); row.className='music-track'; row.dataset.file=track.file;
       row.textContent=track.title;
       if(musicCurrentFile===track.file) row.classList.add('playing');
-      row.addEventListener('click',()=>{ playMusicTrack(track.file); });
       list.appendChild(row);
     });
   });
@@ -2890,6 +2889,12 @@ function scheduleFlip() {
   // ── MUSIC ─────────────────────────────────────────────────────────
   const musicPanel = el('music-panel');
   buildMusicPanel();
+  // Delegated click on track list — stopPropagation prevents document close handler from firing
+  el('music-track-list').addEventListener('click', e=>{
+    const row = e.target.closest('.music-track');
+    if(row) playMusicTrack(row.dataset.file);
+    e.stopPropagation();
+  });
 
   el('btn-music').addEventListener('click', e=>{
     if(!isHost) return;
@@ -3073,9 +3078,7 @@ function scheduleFlip() {
       console.log('[DEBUG] S.players:',JSON.stringify(S.players.map(p=>({id:p.id,cx:p.cx,cy:p.cy}))));
     }
   });
-  // Global event catch-all — fires for ANY click anywhere on the page
-  document.addEventListener('pointerdown', e=>console.log('[DEBUG] document pointerdown | target:',e.target?.tagName,e.target?.className?.toString().slice(0,40),'| isHost:',isHost), true);
-  document.addEventListener('click', e=>console.log('[DEBUG] document click | target:',e.target?.tagName,e.target?.className?.toString().slice(0,40)), true);
+
 
   // ── ZONE SWAP (drag player ↔ npc between rows) ──────────────────
   ['upper-zone','lower-zone'].forEach(zid=>{
