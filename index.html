@@ -572,6 +572,15 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
 }
 body.panel-open #music-panel { right:294px; }
 
+/* ── NIGHT MODE ── */
+#night-canvas {
+  position:absolute; inset:0; width:100%; height:100%;
+  pointer-events:none; z-index:25; display:none;
+  mix-blend-mode:multiply;
+}
+body.night #night-canvas { display:block; }
+#btn-night.active { color:#aac4ff; border-color:#556699; background:rgba(100,130,220,.15); }
+
 /* ── HANDOUT LOG (players only) ── */
 #handout-log {
   position:fixed; bottom:32px; left:16px; z-index:60;
@@ -881,6 +890,7 @@ body.combat #aoe-layer { display:block; }
     </div>
     <div id="upper-zone"></div>
     <div id="lower-zone"></div>
+    <canvas id="night-canvas" width="1920" height="1080"></canvas>
     <div id="combat-arena"></div>
     <svg id="measure-svg" xmlns="http://www.w3.org/2000/svg"></svg>
     <svg id="ping-layer"  xmlns="http://www.w3.org/2000/svg"></svg>
@@ -1138,6 +1148,7 @@ body.combat #aoe-layer { display:block; }
   <button class="tbtn" id="btn-combat"  title="Combat Mode">⚔️</button>
   <button class="tbtn" id="btn-music"   title="Music">🎵</button>
   <button class="tbtn" id="btn-weather" title="Weather">🌦</button>
+  <button class="tbtn" id="btn-night"   title="Day / Night">🌙</button>
   <button class="tbtn" id="btn-draw"    title="Draw Tool">✏️</button>
   <button class="tbtn" id="btn-save"    title="Cloud Save">💾</button>
   <button class="tbtn" id="btn-load"    title="Cloud Load">📂</button>
@@ -1213,7 +1224,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:null, aoeShapes:[], drawStrokes:[],
+  combatMode:false, weather:null, nightMode:false, aoeShapes:[], drawStrokes:[],
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
 
@@ -1515,7 +1526,7 @@ function broadcast(msg,exc) { guestConns.forEach(c=>{ if(c!==exc&&c.open) c.send
 // ── MESSAGES ─────────────────────────────────────────────────────
 function handleMsg(msg,fromConn) {
   switch(msg.type) {
-    case 'full_state':    S=msg.state; renderAll(); break;
+    case 'full_state':    S=msg.state; renderAll(); if(S.nightMode) applyNight(true); break;
     case 'set_backdrop':  S.backdrop=msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_name': S.dmName=msg.name; el('dm-label').textContent=msg.name; if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_avatar': S.dmAvatar=msg.url; S.dmName=msg.name||null; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
@@ -1678,6 +1689,7 @@ function handleMsg(msg,fromConn) {
       if(isHost) broadcast(msg, fromConn);
       break;
     case 'set_weather': S.weather=msg.effect; if(window.applyWeather) window.applyWeather(msg.effect); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_night':   applyNight(msg.active); if(isHost) broadcast(msg,fromConn); break;
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
     case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.mod||0,msg.name); if(isHost) broadcast(msg,fromConn); break;
   }
@@ -2111,6 +2123,75 @@ setTimeout(()=>{
   });
 }, 400);
 
+// ── NIGHT MODE ────────────────────────────────────────────────────
+let nightRAF = null;
+
+function getPlayerTorchPositions() {
+  // Returns {cx,cy} in 1920×1080 canvas space for each player
+  if(S.combatMode) {
+    return S.players.filter(p=>p.cx!=null).map(p=>({cx:p.cx+CELL/2, cy:p.cy+CELL/2}));
+  }
+  // Theatre mode: read positions from av-wrap DOM elements
+  const canvasEl=el('canvas');
+  if(!canvasEl) return [];
+  const cr=canvasEl.getBoundingClientRect(), scale=cr.width/1920;
+  return Array.from(el('lower-zone')?.querySelectorAll('.av-wrap')||[]).map(wrap=>{
+    const wr=wrap.getBoundingClientRect();
+    return { cx:(wr.left-cr.left)/scale+(wr.width/scale)/2, cy:(wr.top-cr.top)/scale+(wr.height/scale)/2 };
+  });
+}
+
+function getTorchRadius() {
+  if(S.combatMode) return 360; // 15ft = 3 cells × 120px
+  // Theatre: larger radius, scale down slightly with more players
+  const n=S.players.length||1;
+  return Math.max(220, 480 - n*40);
+}
+
+function renderNightOverlay(ts=0) {
+  const nc=el('night-canvas'); if(!nc) return;
+  const ctx=nc.getContext('2d');
+  ctx.clearRect(0,0,1920,1080);
+
+  // Flicker: two sine waves at different frequencies for organic feel
+  const flicker = Math.sin(ts/700)*14 + Math.sin(ts/180)*6;
+  const baseR = getTorchRadius();
+  const positions = getPlayerTorchPositions();
+  const alpha = S.combatMode ? 0.78 : 0.92;
+
+  // Fill with darkness (multiply: black → fully dark)
+  ctx.fillStyle = `rgba(3,3,12,${alpha})`;
+  ctx.fillRect(0,0,1920,1080);
+
+  // Torch radial gradients — warm-to-black, multiply blend does the rest
+  positions.forEach(({cx,cy})=>{
+    const r = baseR + flicker;
+    const g = ctx.createRadialGradient(cx,cy,0, cx,cy,r);
+    g.addColorStop(0,    '#FFEECC'); // warm bright center — nearly passes scene through
+    g.addColorStop(0.12, '#FFAA44'); // amber inner ring
+    g.addColorStop(0.30, '#CC6600'); // deep amber
+    g.addColorStop(0.52, '#661A00'); // dark orange-red
+    g.addColorStop(0.72, '#1A0400'); // near black ember
+    g.addColorStop(1,    '#000000'); // full black — merges with darkness
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+  });
+}
+
+function applyNight(active) {
+  S.nightMode = active;
+  document.body.classList.toggle('night', active);
+  el('btn-night').classList.toggle('active', active);
+  el('btn-night').textContent = active ? '☀️' : '🌙';
+  if(active) {
+    if(!nightRAF) nightRAF = requestAnimationFrame(function loop(ts){
+      if(!S.nightMode){ nightRAF=null; el('night-canvas').getContext('2d').clearRect(0,0,1920,1080); return; }
+      renderNightOverlay(ts);
+      nightRAF = requestAnimationFrame(loop);
+    });
+  }
+}
+
 // ── HANDOUT LOG ───────────────────────────────────────────────────
 const handoutLog = []; // session-only — cleared on page load
 function updateHandoutLog() {
@@ -2158,7 +2239,7 @@ let musicRepeat = false;
 
 musicAudio.addEventListener('ended', ()=>{
   if(musicRepeat && musicCurrentFile) { musicAudio.currentTime=0; musicAudio.play().catch(()=>{}); }
-  else { musicCurrentFile=null; updateMusicUI(); if(isHost) send({type:'music_stop'}); }
+  else { musicCurrentFile=null; updateMusicUI(); send({type:'music_stop'}); }
 });
 
 function updateMusicUI() {
@@ -2172,7 +2253,7 @@ function playMusicTrack(file) {
   if(musicCurrentFile===file) { // toggle off
     musicAudio.pause(); musicAudio.currentTime=0;
     musicCurrentFile=null; updateMusicUI();
-    if(isHost) send({type:'music_stop'});
+    send({type:'music_stop'});
     return;
   }
   musicAudio.pause();
@@ -2181,7 +2262,7 @@ function playMusicTrack(file) {
   musicAudio.play().catch(e=>console.warn('[Music]',e));
   musicCurrentFile = file;
   updateMusicUI();
-  if(isHost) send({type:'music_play', file, time:0});
+  send({type:'music_play', file, time:0});
 }
 
 function buildMusicPanel() {
@@ -2196,7 +2277,7 @@ function buildMusicPanel() {
       const row=document.createElement('div'); row.className='music-track'; row.dataset.file=track.file;
       row.textContent=track.title;
       if(musicCurrentFile===track.file) row.classList.add('playing');
-      row.addEventListener('click',()=>{ if(isHost) playMusicTrack(track.file); });
+      row.addEventListener('click',()=>{ playMusicTrack(track.file); });
       list.appendChild(row);
     });
   });
@@ -2634,6 +2715,7 @@ function scheduleFlip() {
   // Toolbar
   el('btn-screen').addEventListener('click',()=>{ const open=el('dm-screen').classList.toggle('open'); document.body.classList.toggle('panel-open',open); });
   el('btn-close-screen').addEventListener('click',()=>{ el('dm-screen').classList.remove('open'); document.body.classList.remove('panel-open'); });
+  el('btn-night').addEventListener('click',()=>{ if(isHost) send({type:'set_night', active:!S.nightMode}); });
   el('btn-combat').addEventListener('click',()=>{ if(isHost) send({type:'set_combat',active:!S.combatMode}); });
 
   // ── PENCIL DRAW TOOL ─────────────────────────────────────────────
