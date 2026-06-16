@@ -2250,6 +2250,9 @@ function updateMusicUI() {
 }
 
 function playMusicTrack(file) {
+  console.log('[Music] playMusicTrack called with:', file, '| current:', musicCurrentFile);
+  const np = el('music-now-playing');
+  if(np) np.textContent = '⏳ Loading: ' + file; // immediate visible feedback
   if(musicCurrentFile===file) { // toggle off
     musicAudio.pause(); musicAudio.currentTime=0;
     musicCurrentFile=null; updateMusicUI();
@@ -2889,20 +2892,19 @@ function scheduleFlip() {
   // ── MUSIC ─────────────────────────────────────────────────────────
   const musicPanel = el('music-panel');
   buildMusicPanel();
-  // Track clicks via document capture — element-level listeners unreliable in Discord iframe
-  document.addEventListener('click', e=>{
+  // Track clicks via pointerdown capture — proven reliable in Discord iframe, unlike click
+  document.addEventListener('pointerdown', e=>{
+    if(!e.target?.closest?.('#music-track-list')) return;
     const row = e.target?.closest?.('.music-track');
-    if(!row) return;
+    if(!row || !row.dataset.file) return;
+    console.log('[Music] track pointerdown:', row.dataset.file);
     playMusicTrack(row.dataset.file);
-    e.stopImmediatePropagation(); // prevent close handler below from also firing
   }, true);
-  // Close panel on outside click (also capture, registered after track handler)
+  // Close panel on outside click
   document.addEventListener('click', e=>{
-    if(!e.target?.closest?.('#music-panel') && !e.target?.closest?.('#btn-music')){
-      if(musicPanel.classList.contains('open')){
-        musicPanel.classList.remove('open');
-        el('btn-music').classList.remove('active');
-      }
+    if(!e.target?.closest?.('#music-panel,#btn-music')){
+      musicPanel.classList.remove('open');
+      el('btn-music').classList.remove('active');
     }
   }, true);
 
