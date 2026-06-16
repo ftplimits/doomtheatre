@@ -2889,12 +2889,22 @@ function scheduleFlip() {
   // ── MUSIC ─────────────────────────────────────────────────────────
   const musicPanel = el('music-panel');
   buildMusicPanel();
-  // Delegated click on track list — stopPropagation prevents document close handler from firing
-  el('music-track-list').addEventListener('click', e=>{
-    const row = e.target.closest('.music-track');
-    if(row) playMusicTrack(row.dataset.file);
-    e.stopPropagation();
-  });
+  // Track clicks via document capture — element-level listeners unreliable in Discord iframe
+  document.addEventListener('click', e=>{
+    const row = e.target?.closest?.('.music-track');
+    if(!row) return;
+    playMusicTrack(row.dataset.file);
+    e.stopImmediatePropagation(); // prevent close handler below from also firing
+  }, true);
+  // Close panel on outside click (also capture, registered after track handler)
+  document.addEventListener('click', e=>{
+    if(!e.target?.closest?.('#music-panel') && !e.target?.closest?.('#btn-music')){
+      if(musicPanel.classList.contains('open')){
+        musicPanel.classList.remove('open');
+        el('btn-music').classList.remove('active');
+      }
+    }
+  }, true);
 
   el('btn-music').addEventListener('click', e=>{
     if(!isHost) return;
@@ -2907,10 +2917,6 @@ function scheduleFlip() {
       musicPanel.style.right = (window.innerWidth - r.right) + 'px';
     }
     e.stopPropagation();
-  });
-  document.addEventListener('click', e=>{
-    if(!musicPanel.contains(e.target) && e.target !== el('btn-music'))
-      musicPanel.classList.remove('open');
   });
   el('music-repeat-btn').addEventListener('click', e=>{
     musicRepeat = !musicRepeat;
