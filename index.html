@@ -1225,6 +1225,7 @@ let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
   combatMode:false, weather:null, nightMode:false, aoeShapes:[], drawStrokes:[],
+  dmDiscordId: null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
 
@@ -1396,12 +1397,12 @@ async function initDiscordSDK() {
     // ── Step 4: Subscribe to voice speaking events ────────────────
     await discordSdk.subscribe(
       'SPEAKING_START',
-      ({ user_id }) => { console.log('[Discord] SPEAKING_START', user_id); setSpeaking(user_id, true); },
+      ({ user_id }) => { setSpeaking(user_id, true);  send({type:'speaking', userId:user_id, active:true});  },
       { channel_id: discordSdk.channelId }
     );
     await discordSdk.subscribe(
       'SPEAKING_STOP',
-      ({ user_id }) => setSpeaking(user_id, false),
+      ({ user_id }) => { setSpeaking(user_id, false); send({type:'speaking', userId:user_id, active:false}); },
       { channel_id: discordSdk.channelId }
     );
     console.log('[Discord] Voice subscriptions active');
@@ -1435,9 +1436,9 @@ async function startDiscordSession(instanceId) {
     console.log('[DooM Theatre] HOST claimed:', id);
     el('toolbar').style.display='flex'; // host sees toolbar
 
-    // Tag DM frame with Discord ID so speaking highlights it — no auto avatar
+    // Tag DM frame with Discord ID so speaking highlights it — store in S so guests sync it
     const user = await sdkPromise;
-    if(user) el('dm-avatar-wrap').dataset.discordId = user.id;
+    if(user){ el('dm-avatar-wrap').dataset.discordId = user.id; S.dmDiscordId = user.id; }
 
     myPeer.on('connection', conn => {
       guestConns.push(conn);
@@ -1650,7 +1651,7 @@ function handleMsg(msg,fromConn) {
       if(!isHost){ musicAudio.pause(); musicAudio.currentTime=0; }
       else broadcast(msg,fromConn);
       updateMusicUI(); break;
-    case 'discord_identity':
+    case 'speaking':   setSpeaking(msg.userId, msg.active); if(isHost) broadcast(msg,fromConn); break;
       // Store attendee identity — host will manually assign to an avatar via right-click
       if(fromConn) discordPeers.set(fromConn.peer, {
         discordUserId: msg.discordUserId, username: msg.username, avatarHash: msg.avatarHash
@@ -1709,6 +1710,7 @@ function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
   el('dm-av-frame').classList.toggle('flipped', !!S.dmFlipped);
   el('dm-label').textContent=S.dmName||'DM';
+  if(S.dmDiscordId) el('dm-avatar-wrap').dataset.discordId = S.dmDiscordId;
 }
 
 function recalcInitiative() {
