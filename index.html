@@ -576,6 +576,30 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
 }
 body.panel-open #music-panel { right:294px; }
 
+/* ── LOADING OVERLAY ── */
+#loading-overlay {
+  position:fixed; inset:0; z-index:9999;
+  background:radial-gradient(ellipse at center,#1a1008 0%,#0a0704 100%);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:18px; transition:opacity .5s ease;
+}
+#loading-overlay.hidden { opacity:0; pointer-events:none; }
+#loading-spinner {
+  width:48px; height:48px; border-radius:50%;
+  border:3px solid rgba(200,169,110,.2); border-top-color:var(--gold);
+  animation:loading-spin 0.9s linear infinite;
+}
+@keyframes loading-spin { to { transform:rotate(360deg); } }
+#loading-text {
+  font-family:'Cinzel',var(--font-display); font-size:14px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--gold-dim);
+}
+#loading-subtext {
+  font-family:sans-serif; font-size:11px; color:var(--text-dim); opacity:0;
+  transition:opacity .4s ease;
+}
+#loading-subtext.show { opacity:1; }
+
 /* ── NIGHT MODE ── */
 #night-canvas {
   position:absolute; inset:0; width:100%; height:100%;
@@ -881,6 +905,13 @@ body.combat #aoe-layer { display:block; }
 </style>
 </head>
 <body>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay">
+  <div id="loading-spinner"></div>
+  <div id="loading-text">Entering the Theatre…</div>
+  <div id="loading-subtext">Still connecting — this can take a few extra seconds</div>
+</div>
 
 <!-- SCENE SHELL -->
 <div id="scene">
@@ -1234,6 +1265,11 @@ let S = { dmAltAvatar:null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
 
+function hideLoadingOverlay() {
+  const ov = el('loading-overlay');
+  if(ov) ov.classList.add('hidden');
+}
+
 // ── SESSION ──────────────────────────────────────────────────────
 let isHost=false, isDiscord=false, roomCode=null;
 let myPeer=null, hostConn=null, guestConns=[];
@@ -1457,6 +1493,7 @@ async function startDiscordSession(instanceId) {
     setStatus('DM — Hosting', 'connected');
     el('peer-list').style.display='flex'; // show empty list, fills as guests join
     renderAll();
+    hideLoadingOverlay();
   });
 
   myPeer.on('error', async err => {
@@ -1532,7 +1569,7 @@ function broadcast(msg,exc) { guestConns.forEach(c=>{ if(c!==exc&&c.open) c.send
 // ── MESSAGES ─────────────────────────────────────────────────────
 function handleMsg(msg,fromConn) {
   switch(msg.type) {
-    case 'full_state':    S=msg.state; renderAll(); if(S.nightMode) applyNight(true); break;
+    case 'full_state':    S=msg.state; renderAll(); if(S.nightMode) applyNight(true); hideLoadingOverlay(); break;
     case 'set_backdrop':  S.backdrop=msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_name': S.dmName=msg.name; el('dm-label').textContent=msg.name; if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_avatar': S.dmAvatar=msg.url; S.dmName=msg.name||null; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
@@ -1658,6 +1695,7 @@ function handleMsg(msg,fromConn) {
       else broadcast(msg,fromConn);
       updateMusicUI(); break;
     case 'speaking':   setSpeaking(msg.userId, msg.active); if(isHost) broadcast(msg,fromConn); break;
+    case 'discord_identity':
       // Store attendee identity — host will manually assign to an avatar via right-click
       if(fromConn) discordPeers.set(fromConn.peer, {
         discordUserId: msg.discordUserId, username: msg.username, avatarHash: msg.avatarHash
@@ -2751,6 +2789,9 @@ function scheduleFlip() {
 // ── INIT ─────────────────────────────────────────────────────────
 (async function init() {
   updateScale();
+  // Loading overlay UX: reveal reassurance text after 4s, force-hide after 20s so it never gets stuck
+  setTimeout(()=>{ const st=el('loading-subtext'); if(st) st.classList.add('show'); }, 4000);
+  setTimeout(()=>{ hideLoadingOverlay(); }, 20000);
 
   const instanceId = detectDiscord();
   if(instanceId) {
@@ -2761,6 +2802,7 @@ function scheduleFlip() {
   } else {
     document.body.classList.add('browser-mode');
     el('test-panel').style.display='flex';
+    hideLoadingOverlay(); // browser test mode — connection is manual, no auto-wait needed
 
     // Test panel collapse toggle
     el('tp-toggle').addEventListener('click',()=>{
