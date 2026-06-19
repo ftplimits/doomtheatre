@@ -355,6 +355,8 @@ body.panel-open #dice-log { right:301px; }
   transition:background .12s, color .12s;
 }
 .ctx-item:hover { background:rgba(139,0,0,.4); color:#ff9090; }
+#ctx-torch.torch-on { color:#ffb84d; }
+#ctx-torch.torch-on:hover { background:rgba(180,100,0,.3); color:#ffd080; }
 
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
@@ -924,6 +926,7 @@ body.combat #aoe-layer { display:block; }
 <div id="ctx-menu">
   <div class="ctx-item" id="ctx-kill">⚔ Kill</div>
   <div class="ctx-item" id="ctx-rename">✏ Rename</div>
+  <div class="ctx-item" id="ctx-torch">🔥 Torch: Off</div>
   <div class="ctx-sep"  id="ctx-style-sep"></div>
   <div class="ctx-mini">Border</div>
   <div class="ctx-swatch-row" id="ctx-border-row"></div>
@@ -1224,7 +1227,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:null, nightMode:false, aoeShapes:[], drawStrokes:[],
+  combatMode:false, weather:null, nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[],
   dmDiscordId: null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
@@ -1691,6 +1694,11 @@ function handleMsg(msg,fromConn) {
       break;
     case 'set_weather': S.weather=msg.effect; if(window.applyWeather) window.applyWeather(msg.effect); if(isHost) broadcast(msg,fromConn); break;
     case 'set_night':   applyNight(msg.active); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_torch': {
+      if(msg.entityType==='dm') S.dmTorch = msg.active;
+      else { const arr=msg.entityType==='player'?S.players:S.npcs; const obj=arr.find(o=>o.id===msg.id); if(obj) obj.torch=msg.active; }
+      if(isHost) broadcast(msg,fromConn); break;
+    }
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
     case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.mod||0,msg.name); if(isHost) broadcast(msg,fromConn); break;
   }
@@ -2129,18 +2137,35 @@ setTimeout(()=>{
 let nightRAF = null;
 
 function getPlayerTorchPositions() {
-  // Returns {cx,cy} in 1920×1080 canvas space for each player
-  if(S.combatMode) {
-    return S.players.filter(p=>p.cx!=null).map(p=>({cx:p.cx+CELL/2, cy:p.cy+CELL/2}));
-  }
-  // Theatre mode: read positions from av-wrap DOM elements
+  // Returns {cx,cy} in 1920×1080 canvas space for each torch-enabled entity
   const canvasEl=el('canvas');
   if(!canvasEl) return [];
   const cr=canvasEl.getBoundingClientRect(), scale=cr.width/1920;
-  return Array.from(el('lower-zone')?.querySelectorAll('.av-wrap')||[]).map(wrap=>{
-    const wr=wrap.getBoundingClientRect();
-    return { cx:(wr.left-cr.left)/scale+(wr.width/scale)/2, cy:(wr.top-cr.top)/scale+(wr.height/scale)/2 };
-  });
+  const positions = [];
+
+  if(S.combatMode) {
+    [...S.players,...S.npcs].filter(p=>p.cx!=null && p.torch===true).forEach(p=>positions.push({cx:p.cx+CELL/2, cy:p.cy+CELL/2}));
+  } else {
+    // Theatre mode: read positions from av-wrap DOM elements, only torch-enabled ones
+    Array.from(document.querySelectorAll('.av-wrap[data-av-id]')||[]).forEach(wrap=>{
+      const frame=wrap.querySelector('[data-av-id]');
+      const id=frame?.dataset?.avId;
+      const obj = S.players.find(p=>p.id===id) || S.npcs.find(n=>n.id===id);
+      if(!obj || obj.torch!==true) return;
+      const wr=wrap.getBoundingClientRect();
+      positions.push({ cx:(wr.left-cr.left)/scale+(wr.width/scale)/2, cy:(wr.top-cr.top)/scale+(wr.height/scale)/2 });
+    });
+  }
+
+  // DM avatar — torch follows S.dmTorch toggle, defaults ON
+  if(S.dmTorch) {
+    const dmWrap = el('dm-avatar-wrap');
+    if(dmWrap) {
+      const dr = dmWrap.getBoundingClientRect();
+      positions.push({ cx:(dr.left-cr.left)/scale+(dr.width/scale)/2, cy:(dr.top-cr.top)/scale+(dr.height/scale)/2 });
+    }
+  }
+  return positions;
 }
 
 function getTorchRadius() {
@@ -2159,7 +2184,7 @@ function renderNightOverlay(ts=0) {
   const flicker = Math.sin(ts/700)*14 + Math.sin(ts/180)*6;
   const baseR = getTorchRadius();
   const positions = getPlayerTorchPositions();
-  const alpha = S.combatMode ? 0.78 : 0.92;
+  const alpha = 0.75;
 
   // 1. Base darkness — opaque dark fill
   ctx.globalCompositeOperation = 'source-over';
@@ -3409,6 +3434,14 @@ function scheduleFlip() {
     const isAvatar = entityType !== 'dm';
     el('ctx-kill').style.display   = isAvatar ? 'block' : 'none';
     el('ctx-rename').style.display = 'block';
+    el('ctx-torch').style.display  = 'block';
+    if(isAvatar) {
+      const arr0 = entityType==='player' ? S.players : S.npcs;
+      const obj0 = arr0.find(o=>o.id===id);
+      const torchOn = obj0?.torch===true;
+      el('ctx-torch').textContent = '🔥 Torch: ' + (torchOn?'On':'Off');
+      el('ctx-torch').classList.toggle('torch-on', torchOn);
+    }
     el('ctx-style-sep').style.display = isAvatar ? 'block' : 'none';
     document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display=isAvatar?'':'none');
 
@@ -3477,6 +3510,9 @@ function scheduleFlip() {
     ctxTarget={entityType:'dm',id:'__dm__',domEl:null};
     el('ctx-kill').style.display='none';
     el('ctx-rename').style.display='block';
+    el('ctx-torch').style.display='block';
+    el('ctx-torch').textContent = '🔥 Torch: ' + (S.dmTorch?'On':'Off');
+    el('ctx-torch').classList.toggle('torch-on', S.dmTorch);
     el('ctx-style-sep').style.display='none';
     document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display='none');
     const menu=el('ctx-menu');
@@ -3540,6 +3576,19 @@ function scheduleFlip() {
       const obj=arr.find(o=>o.id===ctxTarget.id);
       if(obj) _promptRename(obj, ctxTarget.entityType);
     }
+    ctxTarget=null;
+  });
+  el('ctx-torch').addEventListener('click',()=>{
+    if(!ctxTarget) return;
+    let nextState;
+    if(ctxTarget.entityType==='dm') nextState = !S.dmTorch;
+    else {
+      const arr=(ctxTarget.entityType==='player'?S.players:S.npcs);
+      const obj=arr.find(o=>o.id===ctxTarget.id);
+      nextState = !(obj?.torch===true);
+    }
+    send({type:'set_torch', entityType:ctxTarget.entityType, id:ctxTarget.id, active:nextState});
+    el('ctx-menu').classList.remove('open');
     ctxTarget=null;
   });
 
