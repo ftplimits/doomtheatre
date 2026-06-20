@@ -760,7 +760,7 @@ body.browser-mode.tp-collapsed #bottom-bar { left:50%; }
 
 /* ── AOE TOOLBAR — left side, vertical ── */
 #aoe-toolbar {
-  position:fixed; left:16px; top:50%; transform:translateY(-50%);
+  position:fixed; left:16px; top:calc(50% - 200px); transform:translateY(-50%);
   z-index:20; display:none; flex-direction:column; align-items:center; gap:5px;
   background:var(--panel-bg); border:1px solid var(--border);
   border-radius:8px; padding:8px 5px;
@@ -1359,19 +1359,33 @@ function discordAvatarUrl(user) {
 }
 
 // Called by SPEAKING_START / SPEAKING_STOP — find every frame tagged with this user
-let speakingAsAvatar = null; // avatar obj.id when host shift+clicks to speak as NPC
+let speakingAsAvatar = null; // avatar obj.id currently overriding DM voice — synced across ALL clients
 
-function clearShiftNpc() {
-  if(!speakingAsAvatar) return;
+function applySpeakingAs(avatarId) {
   document.querySelectorAll('.av-wrap.shift-npc,.ca-wrap.shift-npc').forEach(w=>{
     w.classList.remove('shift-npc','speaking');
   });
-  speakingAsAvatar = null;
+  speakingAsAvatar = avatarId;
+  if(avatarId) {
+    document.querySelectorAll('[data-av-id="'+avatarId+'"]').forEach(frame=>{
+      const wrap=frame.closest('.av-wrap,.ca-wrap');
+      if(wrap) wrap.classList.add('shift-npc');
+    });
+  }
+}
+
+function clearShiftNpc() {
+  // Host-only: initiates the clear and broadcasts it. Guests apply via the message handler.
+  if(!isHost || !speakingAsAvatar) return;
+  applySpeakingAs(null);
+  send({type:'speaking_as', avatarId:null});
 }
 
 function setSpeaking(userId, active) {
-  const isHostSpeaking = isHost && discordUser?.id === userId;
-  if(isHostSpeaking) {
+  // Compare against synced S.dmDiscordId — works correctly for host AND guests,
+  // unlike the old isHost-gated check which only ever matched on the host's own client.
+  const isDmSpeaking = S.dmDiscordId && userId === S.dmDiscordId;
+  if(isDmSpeaking) {
     if(speakingAsAvatar) {
       document.querySelectorAll('[data-av-id="'+speakingAsAvatar+'"]').forEach(frame=>{
         const wrap=frame.closest('.av-wrap,.ca-wrap');
@@ -1379,7 +1393,7 @@ function setSpeaking(userId, active) {
       });
     } else {
       el('dm-avatar-wrap').classList.toggle('speaking',active);
-      // Swap DM alt avatar image
+      // Swap DM alt avatar image — now runs on every client, not just the host
       if(S.dmAltAvatar || !active) {
         const img=el('dm-av-frame').querySelector('img');
         if(img) img.src = (active && S.dmAltAvatar) ? S.dmAltAvatar : (S.dmAvatar||'');
@@ -1695,6 +1709,10 @@ function handleMsg(msg,fromConn) {
       else broadcast(msg,fromConn);
       updateMusicUI(); break;
     case 'speaking':   setSpeaking(msg.userId, msg.active); if(isHost) broadcast(msg,fromConn); break;
+    case 'speaking_as':
+      applySpeakingAs(msg.avatarId);
+      if(isHost) broadcast(msg,fromConn);
+      break;
     case 'discord_identity':
       // Store attendee identity — host will manually assign to an avatar via right-click
       if(fromConn) discordPeers.set(fromConn.peer, {
@@ -1828,7 +1846,7 @@ function makeAvatarEl(obj,removeType) {
     wrap.addEventListener('mousedown',e=>{
       if(e.shiftKey && e.button===0) {
         e.preventDefault(); e.stopPropagation();
-        clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc');
+        clearShiftNpc(); applySpeakingAs(obj.id); send({type:'speaking_as', avatarId:obj.id});
         return;
       }
     });
@@ -1932,7 +1950,7 @@ function makeCombatAv(obj, entityType, idx) {
     console.log('[DEBUG] ca-frame pointerdown | button:',e.button,'| isHost:',isHost,'| id:',obj.id);
     if(e.button!==0) return;
     if(e.ctrlKey||e.metaKey){ _promptInitiative(obj,entityType); return; }
-    if(e.shiftKey&&isHost){ clearShiftNpc(); speakingAsAvatar=obj.id; wrap.classList.add('shift-npc'); return; }
+    if(e.shiftKey&&isHost){ clearShiftNpc(); applySpeakingAs(obj.id); send({type:'speaking_as', avatarId:obj.id}); return; }
     if(aoeActive) return;
     const sc=toCanvas(e), sCX=obj.cx, sCY=obj.cy;
     console.log('[DEBUG] drag start | sc:',sc,'| sCX:',sCX,'| sCY:',sCY);
