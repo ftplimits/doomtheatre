@@ -1357,7 +1357,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:null, nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[], textItems:[],
+  combatMode:false, weather:null, nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[], textItems:[], handoutLog:[],
   dmDiscordId: null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
@@ -1785,10 +1785,14 @@ function handleMsg(msg,fromConn) {
     }
     case 'show_handout':
       showHandout(msg.url);
-      if(!handoutLog.find(h=>h.url===msg.url)){
-        handoutLog.push({url:msg.url, name:msg.name||'Handout'});
+      if(!S.handoutLog.find(h=>h.url===msg.url)){
+        S.handoutLog.push({url:msg.url, name:msg.name||'Handout'});
         updateHandoutLog();
       }
+      if(isHost) broadcast(msg,fromConn); break;
+    case 'remove_handout_log':
+      S.handoutLog = S.handoutLog.filter(h=>h.url!==msg.url);
+      updateHandoutLog();
       if(isHost) broadcast(msg,fromConn); break;
     case 'dismiss_handout': dismissHandout(); if(isHost) broadcast(msg,fromConn); break;
     case 'ping':       if(window.spawnPing) window.spawnPing(msg.cx,msg.cy,msg.color); if(isHost) broadcast(msg,fromConn); break;
@@ -1957,7 +1961,7 @@ function syncCombatState() {
   el('combat-arena').innerHTML='';
   if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 }
-function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); renderTextLayer(); if(window.applyWeather) window.applyWeather(S.weather); recalcInitiative(); }
+function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); renderTextLayer(); updateHandoutLog(); if(window.applyWeather) window.applyWeather(S.weather); recalcInitiative(); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
@@ -2536,31 +2540,32 @@ function applyNight(active) {
 }
 
 // ── HANDOUT LOG ───────────────────────────────────────────────────
-const handoutLog = []; // session-only — cleared on page load
 function updateHandoutLog() {
   if(isHost) {
     // Host sees a read-only mirror inside the DM Screen, using the same .res-thumb
     // styling as the library grids, so they can verify exactly what guests have seen.
     const grid=el('dm-handout-log'); if(!grid) return;
     grid.innerHTML='';
-    handoutLog.forEach(h=>{
+    S.handoutLog.forEach(h=>{
       const thumb=document.createElement('div'); thumb.className='res-thumb'; thumb.title=h.name||'Handout';
       thumb.innerHTML=`<img src="${h.url}" alt="${h.name||''}">`;
       thumb.querySelector('img').addEventListener('click',()=>showHandout(h.url));
+      thumb.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); send({type:'remove_handout_log', url:h.url}); });
       grid.appendChild(thumb);
     });
     return;
   }
   const log=el('handout-log'), items=el('handout-log-items'); if(!log||!items) return;
   items.innerHTML='';
-  handoutLog.forEach(h=>{
+  S.handoutLog.forEach(h=>{
     const div=document.createElement('div'); div.className='hl-thumb';
     div.title=h.name||'Handout';
     div.innerHTML=`<img src="${h.url}" alt="${h.name||''}">`;
     div.addEventListener('click',()=>showHandout(h.url));
+    div.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); send({type:'remove_handout_log', url:h.url}); });
     items.appendChild(div);
   });
-  log.classList.toggle('visible', handoutLog.length>0);
+  log.classList.toggle('visible', S.handoutLog.length>0);
 }
 
 // ── MUSIC ─────────────────────────────────────────────────────────
