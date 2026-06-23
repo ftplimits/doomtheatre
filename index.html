@@ -1298,7 +1298,7 @@ body.combat #aoe-layer { display:block; }
     <div class="ds-section"><div class="ds-head"><h3>Players</h3><button class="upload-btn" data-cat="players">📁 Upload</button></div><div class="res-grid" id="lib-players"></div></div>
     <div class="ds-section"><div class="ds-head"><h3>NPCs &amp; Monsters</h3><button class="upload-btn" data-cat="npcs">📁 Upload</button></div><div class="res-grid" id="lib-npcs"></div></div>
     <div class="ds-section"><div class="ds-head"><h3>Handouts</h3><button class="upload-btn" data-cat="handouts">📁 Upload</button></div><div class="res-grid" id="lib-handouts"></div></div>
-    <div class="ds-section"><div class="ds-head"><h3>Shown This Session</h3></div><div class="res-grid" id="dm-handout-log"></div></div>
+    <div class="ds-section"><div class="ds-head"><h3>Revealed Handouts</h3></div><div class="res-grid" id="dm-handout-log"></div></div>
   </div>
 </div>
 
@@ -1750,7 +1750,15 @@ function handleMsg(msg,fromConn) {
       document.querySelectorAll('[data-av-id="'+msg.id+'"]').forEach(f=>{ const w=f.closest('.av-wrap,.ca-wrap'); if(w) w.remove(); });
       recalcInitiative();
       if(isHost) broadcast(msg,fromConn); break;
-    case 'add_npc':       S.npcs.push(msg.npc); renderUpperZone(); if(isHost) broadcast(msg,fromConn); break;
+    case 'add_npc':
+      S.npcs.push(msg.npc);
+      renderUpperZone();
+      if(S.combatMode && msg.npc.cx!=null) {
+        // Reinforcement run-in: appends a live token using the existing
+        // ca-from-right slide animation already defined for NPC entrances.
+        el('combat-arena').appendChild(makeCombatAv(msg.npc, 'npc', S.npcs.length-1));
+      }
+      if(isHost) broadcast(msg,fromConn); break;
     case 'remove_npc':
       S.npcs=S.npcs.filter(n=>n.id!==msg.id);
       document.querySelectorAll('[data-av-id="'+msg.id+'"]').forEach(f=>{ const w=f.closest('.av-wrap,.ca-wrap'); if(w) w.remove(); });
@@ -2332,7 +2340,22 @@ async function handleUpload(files,cat) {
 function applyBackdrop(item) { send({type:'set_backdrop', url:item.url}); }
 function applyHandout(item)  { send({type:'show_handout', url:item.url, name:item.name||'Handout'}); }
 function applyPlayer(item)   { send({type:'add_player', player:{id:uid(),name:item.name||'Player',avatar:item.url,flipped:false,cx:null,cy:null,size:item.size||undefined}}); }
-function applyNpc(item)      { send({type:'add_npc',    npc:  {id:uid(),name:item.name||'NPC',   avatar:item.url,flipped:false,cx:null,cy:null,size:item.size||undefined}}); }
+function applyNpc(item) {
+  const npc = {id:uid(), name:item.name||'NPC', avatar:item.url, flipped:false, cx:null, cy:null, size:item.size||undefined};
+  if(S.combatMode) {
+    // Mid-fight reinforcement: stack below the lowest existing NPC in their column
+    // instead of leaving cx/cy null (which would only place it once combat is re-entered).
+    const npcX = (COLS-3)*CELL;
+    const h = npc.size==='large' ? 2*CELL : CELL;
+    let maxBottom = 0;
+    S.npcs.forEach(n=>{
+      if(n.cx!=null){ const nh = n.size==='large'?2*CELL:CELL; maxBottom = Math.max(maxBottom, n.cy+nh); }
+    });
+    npc.cx = npcX;
+    npc.cy = clamp(maxBottom, 0, GRID_H-h);
+  }
+  send({type:'add_npc', npc});
+}
 
 // ── DICE ─────────────────────────────────────────────────────────
 const diceLog=[], LOG_MAX=10;
