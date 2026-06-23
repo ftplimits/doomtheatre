@@ -1298,6 +1298,7 @@ body.combat #aoe-layer { display:block; }
     <div class="ds-section"><div class="ds-head"><h3>Players</h3><button class="upload-btn" data-cat="players">📁 Upload</button></div><div class="res-grid" id="lib-players"></div></div>
     <div class="ds-section"><div class="ds-head"><h3>NPCs &amp; Monsters</h3><button class="upload-btn" data-cat="npcs">📁 Upload</button></div><div class="res-grid" id="lib-npcs"></div></div>
     <div class="ds-section"><div class="ds-head"><h3>Handouts</h3><button class="upload-btn" data-cat="handouts">📁 Upload</button></div><div class="res-grid" id="lib-handouts"></div></div>
+    <div class="ds-section"><div class="ds-head"><h3>Shown This Session</h3></div><div class="res-grid" id="dm-handout-log"></div></div>
   </div>
 </div>
 
@@ -1755,7 +1756,12 @@ function handleMsg(msg,fromConn) {
       document.querySelectorAll('[data-av-id="'+msg.id+'"]').forEach(f=>{ const w=f.closest('.av-wrap,.ca-wrap'); if(w) w.remove(); });
       recalcInitiative();
       if(isHost) broadcast(msg,fromConn); break;
-    case 'set_combat':    S.combatMode=msg.active; applyCombat(); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_combat':
+      S.combatMode=msg.active;
+      S.drawStrokes=[]; if(window.clearDraw) window.clearDraw();
+      S.textItems=[]; renderTextLayer();
+      applyCombat();
+      if(isHost) broadcast(msg,fromConn); break;
     case 'combat_move': {
       const arr=msg.entityType==='player'?S.players:S.npcs;
       const obj=arr.find(o=>o.id===msg.id);
@@ -1779,7 +1785,7 @@ function handleMsg(msg,fromConn) {
     }
     case 'show_handout':
       showHandout(msg.url);
-      if(!isHost && !handoutLog.find(h=>h.url===msg.url)){
+      if(!handoutLog.find(h=>h.url===msg.url)){
         handoutLog.push({url:msg.url, name:msg.name||'Handout'});
         updateHandoutLog();
       }
@@ -2532,7 +2538,19 @@ function applyNight(active) {
 // ── HANDOUT LOG ───────────────────────────────────────────────────
 const handoutLog = []; // session-only — cleared on page load
 function updateHandoutLog() {
-  if(isHost) return;
+  if(isHost) {
+    // Host sees a read-only mirror inside the DM Screen, using the same .res-thumb
+    // styling as the library grids, so they can verify exactly what guests have seen.
+    const grid=el('dm-handout-log'); if(!grid) return;
+    grid.innerHTML='';
+    handoutLog.forEach(h=>{
+      const thumb=document.createElement('div'); thumb.className='res-thumb'; thumb.title=h.name||'Handout';
+      thumb.innerHTML=`<img src="${h.url}" alt="${h.name||''}">`;
+      thumb.querySelector('img').addEventListener('click',()=>showHandout(h.url));
+      grid.appendChild(thumb);
+    });
+    return;
+  }
   const log=el('handout-log'), items=el('handout-log-items'); if(!log||!items) return;
   items.innerHTML='';
   handoutLog.forEach(h=>{
@@ -3641,10 +3659,25 @@ function scheduleFlip() {
   });
 
   // ── TEXT TOOL ─────────────────────────────────────────────────────
+  function clearTextTool() {
+    textToolActive=false;
+    el('dm-text-btn').classList.remove('active');
+    el('canvas').style.cursor='';
+  }
   el('dm-text-btn').addEventListener('click', ()=>{
     textToolActive = !textToolActive;
     el('dm-text-btn').classList.toggle('active', textToolActive);
     el('canvas').style.cursor = textToolActive ? 'text' : '';
+  });
+  // Right-click canvas while text tool active → deselect tool only (mirrors AoE pattern)
+  el('canvas').addEventListener('contextmenu', e=>{
+    if(!textToolActive || e.target.closest('.text-item')) return;
+    e.preventDefault(); e.stopPropagation();
+    clearTextTool();
+  });
+  // Escape → deselect text tool
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape' && textToolActive) clearTextTool();
   });
   el('canvas').addEventListener('mousedown', e=>{
     if(e.button!==0 || !textToolActive) return;
