@@ -576,6 +576,32 @@ body.panel-open #save-menu, body.panel-open #load-menu { right:294px; }
 }
 body.panel-open #music-panel { right:294px; }
 
+/* ── JOIN REQUESTS ── */
+#join-requests {
+  position:fixed; top:14px; left:50%; transform:translateX(-50%);
+  z-index:9000; display:flex; flex-direction:column; gap:6px;
+  pointer-events:all;
+}
+.join-req-row {
+  display:flex; align-items:center; gap:10px;
+  background:var(--panel-bg); border:1px solid var(--gold-dim);
+  border-radius:8px; padding:8px 12px;
+  font-family:'Cinzel',var(--font-display); font-size:12px; color:var(--gold);
+  box-shadow:0 4px 16px rgba(0,0,0,.6);
+  animation:join-req-in .3s ease;
+  white-space:nowrap;
+}
+@keyframes join-req-in { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+.join-req-btn {
+  border:1px solid var(--border); border-radius:5px; padding:4px 10px;
+  cursor:pointer; font-family:inherit; font-size:11px; background:none;
+  transition:all .12s;
+}
+.join-req-admit { color:#7ee787; border-color:#2a5a2a; }
+.join-req-admit:hover { background:rgba(60,180,90,.15); }
+.join-req-deny { color:#ff6b6b; border-color:#a33333; }
+.join-req-deny:hover { background:rgba(180,40,40,.15); }
+
 /* ── LOADING OVERLAY ── */
 #loading-overlay {
   position:fixed; inset:0; z-index:9999;
@@ -656,12 +682,12 @@ body.night #night-canvas { display:block; }
 .cm-item.active::before { content:'✓'; position:absolute; left:10px; color:var(--gold); font-size:9px; }
 
 /* ── INITIATIVE & RENAME PROMPTS ── */
-#init-prompt, #rename-prompt {
+#init-prompt, #rename-prompt, #confirm-prompt {
   position:fixed; inset:0; z-index:10000; display:none;
   align-items:center; justify-content:center;
   background:rgba(0,0,0,.65);
 }
-#init-prompt.open, #rename-prompt.open { display:flex; }
+#init-prompt.open, #rename-prompt.open, #confirm-prompt.open { display:flex; }
 .init-prompt-box {
   background:var(--panel-bg); border:1px solid var(--gold-dim);
   border-radius:10px; padding:20px 24px; min-width:220px;
@@ -906,11 +932,14 @@ body.combat #aoe-layer { display:block; }
 </head>
 <body>
 
+<!-- JOIN REQUESTS (host only) -->
+<div id="join-requests"></div>
+
 <!-- LOADING OVERLAY -->
 <div id="loading-overlay">
   <div id="loading-spinner"></div>
   <div id="loading-text">Entering the Theatre…</div>
-  <div id="loading-subtext">Still connecting — this can take a few extra seconds</div>
+  <div id="loading-subtext">Still connecting — this can take a few extra seconds, or the host may need to admit you</div>
 </div>
 
 <!-- SCENE SHELL -->
@@ -1090,6 +1119,16 @@ body.combat #aoe-layer { display:block; }
   <div class="cm-item" id="cm-clear-init">✕ Clear Initiative</div>
 </div>
 <!-- RENAME PROMPT -->
+<div id="confirm-prompt">
+  <div class="init-prompt-box">
+    <div class="init-prompt-title" id="confirm-prompt-title">Are you sure?</div>
+    <div class="init-prompt-btns">
+      <button id="confirm-prompt-ok">✓ Confirm</button>
+      <button id="confirm-prompt-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="rename-prompt">
   <div class="init-prompt-box">
     <div class="init-prompt-title">Rename — <span id="rename-prompt-name"></span></div>
@@ -1273,6 +1312,8 @@ function hideLoadingOverlay() {
 // ── SESSION ──────────────────────────────────────────────────────
 let isHost=false, isDiscord=false, roomCode=null;
 let myPeer=null, hostConn=null, guestConns=[];
+let receivedFullState=false; // guest-side: did we ever get accepted? used to detect denial vs disconnect
+const pendingConns = new Map(); // peerId → { conn, identity, fallbackTimer }
 let dragAsset=null, cDrag=null, zoneSwapDrag=null;
 let aoeActive=null, aoeColor='#1a6fff', aoeDragStart=null;
 
@@ -1495,15 +1536,7 @@ async function startDiscordSession(instanceId) {
     const user = await sdkPromise;
     if(user){ el('dm-avatar-wrap').dataset.discordId = user.id; S.dmDiscordId = user.id; }
 
-    myPeer.on('connection', conn => {
-      guestConns.push(conn);
-      wireConn(conn, true);
-      conn.on('open', () => {
-        conn.send({ type:'full_state', state:S });
-        setPeerCount();
-        setStatus(`${guestConns.length} connected`, 'connected');
-      });
-    });
+    myPeer.on('connection', conn => handleIncomingConnection(conn));
     setStatus('DM — Hosting', 'connected');
     el('peer-list').style.display='flex'; // show empty list, fills as guests join
     renderAll();
@@ -1551,11 +1584,76 @@ function makePeer(id) {
     p.on('open',()=>res(p)); p.on('error',rej);
   });
 }
+// ── JOIN ADMISSION SYSTEM ──────────────────────────────────────────
+function handleIncomingConnection(conn) {
+  const entry = { conn, identity: null };
+  pendingConns.set(conn.peer, entry);
+  // Capture the guest's one-shot discord_identity message (sent immediately on open)
+  // for display purposes only — .once() self-removes so it never double-fires
+  // alongside wireConn's persistent handler that gets attached on admit.
+  conn.once('data', data => {
+    if(data?.type === 'discord_identity') {
+      entry.identity = { username: data.username, discordUserId: data.discordUserId };
+      renderJoinRequests();
+    }
+  });
+  conn.on('close', () => { pendingConns.delete(conn.peer); renderJoinRequests(); });
+  conn.on('error', () => { pendingConns.delete(conn.peer); renderJoinRequests(); });
+  renderJoinRequests();
+}
+function admitConn(peerId) {
+  const entry = pendingConns.get(peerId); if(!entry) return;
+  pendingConns.delete(peerId);
+  renderJoinRequests();
+  const conn = entry.conn;
+  guestConns.push(conn);
+  wireConn(conn, true);
+  if(entry.identity) discordPeers.set(conn.peer, entry.identity); // seed identity captured pre-admission
+  const sendInitialState = () => {
+    conn.send({ type:'full_state', state:S });
+    if(musicCurrentFile) conn.send({type:'music_play', file:musicCurrentFile, time:musicAudio.currentTime});
+  };
+  if(conn.open) sendInitialState(); else conn.once('open', sendInitialState);
+  setPeerCount();
+  updatePeerList();
+  setStatus(`${guestConns.length} connected`, 'connected');
+}
+function denyConn(peerId) {
+  const entry = pendingConns.get(peerId); if(!entry) return;
+  pendingConns.delete(peerId);
+  renderJoinRequests();
+  const conn = entry.conn;
+  const sendDenial = () => { try { conn.send({ type:'join_denied' }); } catch {} setTimeout(()=>{ try{conn.close();}catch{} }, 250); };
+  if(conn.open) sendDenial(); else conn.once('open', sendDenial);
+}
+function renderJoinRequests() {
+  const box = el('join-requests'); if(!box) return;
+  box.innerHTML = '';
+  pendingConns.forEach((entry, peerId) => {
+    const name = entry.identity?.username || 'Unknown Player';
+    const row = document.createElement('div'); row.className='join-req-row';
+    row.innerHTML = `<span>👤 ${name} wants to join</span>
+      <button class="join-req-btn join-req-admit" data-peer="${peerId}">✓ Admit</button>
+      <button class="join-req-btn join-req-deny" data-peer="${peerId}">✕ Deny</button>`;
+    box.appendChild(row);
+  });
+}
+// Delegated click via document capture — proven reliable pattern in Discord's iframe
+document.addEventListener('pointerdown', e => {
+  const admitBtn = e.target?.closest?.('.join-req-admit');
+  const denyBtn  = e.target?.closest?.('.join-req-deny');
+  if(admitBtn) admitConn(admitBtn.dataset.peer);
+  else if(denyBtn) denyConn(denyBtn.dataset.peer);
+}, true);
+
 function wireConn(conn,asHost) {
   conn.on('data', msg=>handleMsg(msg,asHost?conn:null));
   conn.on('close',()=>{
     if(asHost){ guestConns=guestConns.filter(c=>c!==conn); discordPeers.delete(conn.peer); setPeerCount(); updatePeerList(); setStatus(`${guestConns.length} connected`,guestConns.length?'connected':''); }
-    else { setStatus('Host disconnected','error'); setTPStatus('Disconnected'); }
+    else {
+      if(!receivedFullState) { setStatus('Waiting for host approval ended','error'); hideLoadingOverlay(); }
+      else { setStatus('Host disconnected','error'); setTPStatus('Disconnected'); }
+    }
   });
   conn.on('error',e=>console.error('conn',e));
 }
@@ -1563,7 +1661,7 @@ async function doHost() {
   isHost=true; setStatus('Connecting…');
   try { myPeer=await makePeer(roomCode); }
   catch(e){ setStatus('Local only','error'); renderAll(); return; }
-  myPeer.on('connection',conn=>{ guestConns.push(conn); wireConn(conn,true); conn.on('open',()=>{ conn.send({type:'full_state',state:S}); if(musicCurrentFile) conn.send({type:'music_play',file:musicCurrentFile,time:musicAudio.currentTime}); setPeerCount(); setStatus(`${guestConns.length} connected`,'connected'); }); });
+  myPeer.on('connection',conn=>handleIncomingConnection(conn));
   setStatus('Hosting','connected');
   el('tp-code').textContent=roomCode;
   setTPStatus('Hosting');
@@ -1583,7 +1681,8 @@ function broadcast(msg,exc) { guestConns.forEach(c=>{ if(c!==exc&&c.open) c.send
 // ── MESSAGES ─────────────────────────────────────────────────────
 function handleMsg(msg,fromConn) {
   switch(msg.type) {
-    case 'full_state':    S=msg.state; renderAll(); if(S.nightMode) applyNight(true); hideLoadingOverlay(); break;
+    case 'full_state':    S=msg.state; receivedFullState=true; renderAll(); if(S.nightMode) applyNight(true); hideLoadingOverlay(); break;
+    case 'join_denied':   setStatus('Join request denied by host', 'error'); hideLoadingOverlay(); break;
     case 'set_backdrop':  S.backdrop=msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_name': S.dmName=msg.name; el('dm-label').textContent=msg.name; if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_avatar': S.dmAvatar=msg.url; S.dmName=msg.name||null; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
@@ -1635,9 +1734,19 @@ function handleMsg(msg,fromConn) {
     case 'move_aoe': {
       const sh=S.aoeShapes.find(s=>s.id===msg.id);
       if(msg.preview){
-        // Visual only — translate existing path without touching S or re-rendering
+        // Visual only — translate/rotate existing path without touching S or re-rendering
         const pvPath=el('aoe-layer')?.querySelector(`[data-aoe-id="${msg.id}"]`);
-        if(pvPath && sh){ const dx=msg.x1-sh.x1, dy=msg.y1-sh.y1; pvPath.setAttribute('transform',`translate(${dx},${dy})`); }
+        if(pvPath && sh){
+          if(sh.type==='cone'){
+            const origAngle=Math.atan2(sh.y2-sh.y1, sh.x2-sh.x1);
+            const newAngle=Math.atan2(msg.y2-msg.y1, msg.x2-msg.x1);
+            const deltaDeg=(newAngle-origAngle)*180/Math.PI;
+            pvPath.setAttribute('transform',`rotate(${deltaDeg}, ${sh.x1}, ${sh.y1})`);
+          } else {
+            const dx=msg.x1-sh.x1, dy=msg.y1-sh.y1;
+            pvPath.setAttribute('transform',`translate(${dx},${dy})`);
+          }
+        }
       } else {
         if(sh){ sh.x1=msg.x1; sh.y1=msg.y1; sh.x2=msg.x2; sh.y2=msg.y2; renderAoeLayer(); }
       }
@@ -2532,17 +2641,31 @@ function renderAoeLayer() {
       const startCanvas = toCanvas(e);
       let moved = false;
       const origX1=shape.x1, origY1=shape.y1, origX2=shape.x2, origY2=shape.y2;
+      const isCone = shape.type === 'cone';
+      const coneR = isCone ? Math.hypot(origX2-origX1, origY2-origY1) : 0;
+      const coneOrigAngle = isCone ? Math.atan2(origY2-origY1, origX2-origX1) : 0;
       let aoeSendThrottle=0;
       function onMove(ev) {
         const cur = toCanvas(ev);
-        const dx = cur.x - startCanvas.x, dy = cur.y - startCanvas.y;
-        if(Math.hypot(dx,dy) > 4) moved = true;
-        if(moved) path.setAttribute('transform', `translate(${dx},${dy})`);
+        const distFromStart = Math.hypot(cur.x-startCanvas.x, cur.y-startCanvas.y);
+        if(distFromStart > 4) moved = true;
+        let pvMsg;
+        if(isCone){
+          // Origin (x1,y1) is locked — dragging only re-aims the cone around it
+          const curAngle = Math.atan2(cur.y-origY1, cur.x-origX1);
+          const deltaDeg = (curAngle-coneOrigAngle)*180/Math.PI;
+          if(moved) path.setAttribute('transform', `rotate(${deltaDeg}, ${origX1}, ${origY1})`);
+          const newX2 = origX1 + coneR*Math.cos(curAngle), newY2 = origY1 + coneR*Math.sin(curAngle);
+          pvMsg = {type:'move_aoe',id:shape.id,x1:origX1,y1:origY1,x2:newX2,y2:newY2,preview:true};
+        } else {
+          const dx = cur.x - startCanvas.x, dy = cur.y - startCanvas.y;
+          if(moved) path.setAttribute('transform', `translate(${dx},${dy})`);
+          pvMsg = {type:'move_aoe',id:shape.id,x1:origX1+dx,y1:origY1+dy,x2:origX2+dx,y2:origY2+dy,preview:true};
+        }
         // Throttled live position broadcast at 20/sec
         const now=performance.now();
         if(moved && now-aoeSendThrottle>=50){
           aoeSendThrottle=now;
-          const pvMsg={type:'move_aoe',id:shape.id,x1:origX1+dx,y1:origY1+dy,x2:origX2+dx,y2:origY2+dy,preview:true};
           if(isHost) broadcast(pvMsg,null); else if(hostConn?.open) hostConn.send(pvMsg);
         }
       }
@@ -2551,9 +2674,15 @@ function renderAoeLayer() {
         path.removeEventListener('pointerup', onUp);
         if(!moved) return;
         const cur = toCanvas(ev);
-        const dx = snap(cur.x - startCanvas.x), dy = snap(cur.y - startCanvas.y);
         path.removeAttribute('transform');
-        send({type:'move_aoe',id:shape.id, x1:origX1+dx,y1:origY1+dy, x2:origX2+dx,y2:origY2+dy});
+        if(isCone){
+          const curAngle = Math.atan2(cur.y-origY1, cur.x-origX1);
+          const finalX2 = origX1 + coneR*Math.cos(curAngle), finalY2 = origY1 + coneR*Math.sin(curAngle);
+          send({type:'move_aoe',id:shape.id, x1:origX1,y1:origY1, x2:finalX2,y2:finalY2});
+        } else {
+          const dx = snap(cur.x - startCanvas.x), dy = snap(cur.y - startCanvas.y);
+          send({type:'move_aoe',id:shape.id, x1:origX1+dx,y1:origY1+dy, x2:origX2+dx,y2:origY2+dy});
+        }
       }
       path.addEventListener('pointermove', onMove);
       path.addEventListener('pointerup', onUp);
@@ -2648,6 +2777,13 @@ async function cloudLoadSave(key) {
   Object.assign(S, loaded);
   renderAll();
   if(isHost) broadcast({ type:'full_state', state:S }, null);
+}
+
+let confirmCallback = null;
+function showConfirm(title, onConfirm) {
+  el('confirm-prompt-title').textContent = title;
+  confirmCallback = onConfirm;
+  el('confirm-prompt').classList.add('open');
 }
 
 async function cloudDeleteSave(key) {
@@ -3094,6 +3230,15 @@ function scheduleFlip() {
   }
   el('rename-prompt-ok').addEventListener('click', submitRename);
   el('rename-prompt-cancel').addEventListener('click', ()=>el('rename-prompt').classList.remove('open'));
+  el('confirm-prompt-ok').addEventListener('click', ()=>{
+    el('confirm-prompt').classList.remove('open');
+    const cb=confirmCallback; confirmCallback=null;
+    if(cb) cb();
+  });
+  el('confirm-prompt-cancel').addEventListener('click', ()=>{
+    el('confirm-prompt').classList.remove('open');
+    confirmCallback=null;
+  });
   el('rename-prompt-input').addEventListener('keydown', e=>{
     if(e.key==='Enter') submitRename();
     if(e.key==='Escape') el('rename-prompt').classList.remove('open');
@@ -3179,10 +3324,11 @@ function scheduleFlip() {
           try { await cloudLoadSave(sv.key); el('load-msg').textContent = '✓ Loaded!'; setTimeout(()=>loadMenu.classList.remove('open'), 800); }
           catch(err) { el('load-msg').textContent = '✗ ' + err.message; }
         });
-        row.querySelector('.load-item-del').addEventListener('click', async ()=>{
-          if(!confirm('Delete "' + sv.name + '"?')) return;
-          try { await cloudDeleteSave(sv.key); row.remove(); if(!el('load-list').children.length) list.innerHTML='<div id="load-empty">No saves.</div>'; }
-          catch(err) { el('load-msg').textContent = '✗ ' + err.message; }
+        row.querySelector('.load-item-del').addEventListener('click', ()=>{
+          showConfirm('Delete "' + sv.name + '"?', async ()=>{
+            try { await cloudDeleteSave(sv.key); row.remove(); if(!el('load-list').children.length) list.innerHTML='<div id="load-empty">No saves.</div>'; }
+            catch(err) { el('load-msg').textContent = '✗ ' + err.message; }
+          });
         });
         list.appendChild(row);
       });
