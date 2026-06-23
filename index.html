@@ -88,6 +88,8 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 .av-frame.flipped:hover { transform:scaleX(-1) translateY(-4px); box-shadow:0 10px 28px rgba(0,0,0,.6); }
 .av-frame img { width:100%; height:100%; object-fit:cover; object-position:center top; display:block; pointer-events:none; -webkit-user-drag:none; }
 .av-placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:40px; color:var(--text-dim); }
+.downed-x { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:none; filter:drop-shadow(0 2px 5px rgba(0,0,0,.85)); z-index:5; }
+.av-wrap.downed .downed-x, .ca-wrap.downed .downed-x { display:block; }
 .av-label { font-family:'Cinzel',var(--font-display); font-size:15px; letter-spacing:.08em; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,.9); text-align:center; width:250px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; background:rgba(0,0,0,.5); border-radius:4px; padding:2px 10px; }@keyframes av-enter-bottom { from{opacity:0;transform:translateY(80px) scale(.85)} to{opacity:1;transform:translateY(0) scale(1)} }
 @keyframes av-enter-top    { from{opacity:0;transform:translateY(-80px) scale(.85)} to{opacity:1;transform:translateY(0) scale(1)} }
 #lower-zone .av-wrap { animation:av-enter-bottom .5s cubic-bezier(.34,1.3,.64,1) both; }
@@ -357,6 +359,46 @@ body.panel-open #dice-log { right:301px; }
 .ctx-item:hover { background:rgba(139,0,0,.4); color:#ff9090; }
 #ctx-torch.torch-on { color:#ffb84d; }
 #ctx-torch.torch-on:hover { background:rgba(180,100,0,.3); color:#ffd080; }
+#ctx-downed.downed-on { color:#ff6666; }
+#ctx-downed.downed-on:hover { background:rgba(180,30,30,.3); color:#ff9999; }
+
+/* ── LIBRARY ITEM PRE-PLACEMENT MENU ── */
+#lib-ctx-menu {
+  position:fixed; z-index:85; min-width:120px;
+  background:rgba(8,4,2,.96); border:1px solid var(--border);
+  border-radius:5px; padding:4px 0; display:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.7);
+  font-family:'Cinzel',var(--font-display); font-size:11px;
+}
+#lib-ctx-menu.open { display:block; }
+.lib-ctx-mini { padding:4px 14px 2px; font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
+.lib-size-btn {
+  flex:1; padding:3px 0; background:rgba(0,0,0,.3); border:1px solid var(--border);
+  border-radius:4px; color:var(--text-dim); font-size:10px; font-family:'Cinzel',var(--font-display);
+  cursor:pointer; transition:all .12s;
+}
+.lib-size-btn:hover  { color:var(--gold-dim); border-color:var(--gold-dim); }
+.lib-size-btn.active { color:var(--gold); border-color:var(--gold); background:rgba(200,169,110,.1); }
+
+/* ── TEXT TOOL ── */
+#text-layer { position:absolute; inset:0; z-index:24; pointer-events:none; }
+.text-item {
+  position:absolute; color:#ffffff; font-family:'Times New Roman', Times, serif;
+  font-size:32px; line-height:1.15; white-space:pre-wrap; cursor:grab;
+  pointer-events:all; outline:none; min-width:24px; min-height:1.15em;
+  text-shadow:0 1px 4px rgba(0,0,0,.9), 0 0 3px rgba(0,0,0,.7);
+  padding:2px 5px; user-select:text; max-width:600px;
+}
+.text-item[contenteditable="true"] { cursor:text; outline:1px dashed rgba(255,255,255,.4); }
+.text-item.dragging { cursor:grabbing; opacity:.85; }
+.dm-text-btn {
+  margin-left:10px; width:28px; height:28px; border-radius:4px;
+  background:rgba(0,0,0,.3); border:1px solid var(--border); color:var(--text-dim);
+  font-family:'Times New Roman',serif; font-size:15px; font-style:italic; cursor:pointer;
+  transition:all .12s;
+}
+.dm-text-btn:hover  { color:var(--gold-dim); border-color:var(--gold-dim); }
+.dm-text-btn.active { color:var(--gold); border-color:var(--gold); background:rgba(200,169,110,.15); }
 
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
@@ -959,6 +1001,7 @@ body.combat #aoe-layer { display:block; }
     <svg id="measure-svg" xmlns="http://www.w3.org/2000/svg"></svg>
     <svg id="ping-layer"  xmlns="http://www.w3.org/2000/svg"></svg>
     <canvas id="pencil-canvas" width="1920" height="1080"></canvas>
+    <div id="text-layer"></div>
     <svg id="aoe-layer"   xmlns="http://www.w3.org/2000/svg">
       <defs>
         <filter id="aoe-glow-filter" x="-50%" y="-50%" width="200%" height="200%">
@@ -990,6 +1033,7 @@ body.combat #aoe-layer { display:block; }
   <div class="ctx-item" id="ctx-kill">⚔ Kill</div>
   <div class="ctx-item" id="ctx-rename">✏ Rename</div>
   <div class="ctx-item" id="ctx-torch">🔥 Torch: Off</div>
+  <div class="ctx-item" id="ctx-downed">❌ Downed: Off</div>
   <div class="ctx-sep"  id="ctx-style-sep"></div>
   <div class="ctx-mini">Border</div>
   <div class="ctx-swatch-row" id="ctx-border-row"></div>
@@ -1078,6 +1122,7 @@ body.combat #aoe-layer { display:block; }
     <button class="dm-size active" data-dsize="4">S</button>
     <button class="dm-size"        data-dsize="12">M</button>
     <button class="dm-size"        data-dsize="24">L</button>
+    <button class="dm-text-btn" id="dm-text-btn" title="Text Tool">T</button>
   </div>
   <button id="dm-clear-btn">🗑 Clear</button>
   <button id="dm-eraser-btn">⬤ Eraser</button>
@@ -1119,6 +1164,17 @@ body.combat #aoe-layer { display:block; }
   <div style="height:1px;background:var(--border);margin:3px 0"></div>
   <div class="cm-item" id="cm-clear-init">✕ Clear Initiative</div>
 </div>
+<div id="lib-ctx-menu">
+  <div class="ctx-item" id="lib-ctx-rename">✏ Rename</div>
+  <div class="ctx-sep"></div>
+  <div class="lib-ctx-mini">Size</div>
+  <div class="ctx-size-row" id="lib-ctx-size-row">
+    <button class="lib-size-btn" data-size="small">S</button>
+    <button class="lib-size-btn" data-size="normal">N</button>
+    <button class="lib-size-btn" data-size="large">L</button>
+  </div>
+</div>
+
 <!-- RENAME PROMPT -->
 <div id="confirm-prompt">
   <div class="init-prompt-box">
@@ -1300,7 +1356,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:null, nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[],
+  combatMode:false, weather:null, nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[], textItems:[],
   dmDiscordId: null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
@@ -1868,7 +1924,21 @@ function handleMsg(msg,fromConn) {
       else { const arr=msg.entityType==='player'?S.players:S.npcs; const obj=arr.find(o=>o.id===msg.id); if(obj) obj.torch=msg.active; }
       if(isHost) broadcast(msg,fromConn); break;
     }
+    case 'set_downed': {
+      const arrD=msg.entityType==='player'?S.players:S.npcs;
+      const objD=arrD.find(o=>o.id===msg.id);
+      if(objD) objD.downed=msg.active;
+      document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
+        const wrap=frame.closest('.av-wrap,.ca-wrap');
+        if(wrap) wrap.classList.toggle('downed', msg.active);
+      });
+      if(isHost) broadcast(msg,fromConn); break;
+    }
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
+    case 'add_text':    S.textItems.push(msg.item); renderTextLayer(); if(isHost) broadcast(msg,fromConn); break;
+    case 'edit_text':    { const t=S.textItems.find(t=>t.id===msg.id); if(t) t.text=msg.text; renderTextLayer(); if(isHost) broadcast(msg,fromConn); break; }
+    case 'move_text':    { const t=S.textItems.find(t=>t.id===msg.id); if(t){ t.x=msg.x; t.y=msg.y; } renderTextLayer(); if(isHost) broadcast(msg,fromConn); break; }
+    case 'remove_text':  S.textItems=S.textItems.filter(t=>t.id!==msg.id); renderTextLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.mod||0,msg.name); if(isHost) broadcast(msg,fromConn); break;
   }
 }
@@ -1881,7 +1951,7 @@ function syncCombatState() {
   el('combat-arena').innerHTML='';
   if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 }
-function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); if(window.applyWeather) window.applyWeather(S.weather); recalcInitiative(); }
+function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); renderTextLayer(); if(window.applyWeather) window.applyWeather(S.weather); recalcInitiative(); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
@@ -1943,11 +2013,13 @@ function makeAvatarEl(obj,removeType) {
   const wrap=document.createElement('div'); wrap.className='av-wrap';
   if(obj.size==='small') wrap.classList.add('av-small');
   else if(obj.size==='large') wrap.classList.add('av-large');
+  if(obj.downed===true) wrap.classList.add('downed');
   const entityType=removeType==='remove_player'?'player':'npc';
   const frame=document.createElement('div'); frame.className='av-frame';
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
-  frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}" draggable="false">`:`<div class="av-placeholder">👤</div>`;
+  frame.innerHTML=(obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}" draggable="false">`:`<div class="av-placeholder">👤</div>`)
+    +`<svg class="downed-x" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="6" y1="6" x2="94" y2="94" stroke="#dd2222" stroke-width="9" stroke-linecap="round"/><line x1="94" y1="6" x2="6" y2="94" stroke="#dd2222" stroke-width="9" stroke-linecap="round"/></svg>`;
   _applyAvatarStyle(frame, obj);
   const lbl=document.createElement('div'); lbl.className='av-label'; lbl.textContent=obj.name||'';
   wrap.appendChild(frame); wrap.appendChild(lbl);
@@ -2045,13 +2117,15 @@ function makeCombatAv(obj, entityType, idx) {
   wrap.dataset.entity=entityType;
   if(obj.size==='large') wrap.classList.add('ca-large');
   else if(obj.size==='small') wrap.classList.add('ca-small');
+  if(obj.downed===true) wrap.classList.add('downed');
   wrap.style.left=obj.cx+'px'; wrap.style.top=obj.cy+'px';
   wrap.style.animationDelay=(idx*0.08)+'s';
 
   const frame=document.createElement('div'); frame.className='ca-frame';
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
-  frame.innerHTML=obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`;
+  frame.innerHTML=(obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`)
+    +`<svg class="downed-x" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="6" y1="6" x2="94" y2="94" stroke="#dd2222" stroke-width="9" stroke-linecap="round"/><line x1="94" y1="6" x2="6" y2="94" stroke="#dd2222" stroke-width="9" stroke-linecap="round"/></svg>`;
 
   _applyAvatarStyle(frame, obj);
   wrap.appendChild(frame);
@@ -2215,8 +2289,25 @@ function buildLib(cid,items,clickFn) {
     thumb.addEventListener('dragend',  ()=>{ dragAsset=null; thumb.style.opacity=''; });
     thumb.querySelector('img').addEventListener('click',()=>clickFn(item));
     thumb.querySelector('.res-del').addEventListener('click',e=>{ e.stopPropagation(); removeLib(cid,idx); });
+    if(cat==='players'||cat==='npcs') {
+      thumb.addEventListener('contextmenu', e=>showLibCtxMenu(e,cat,idx));
+    }
     grid.appendChild(thumb);
   });
+}
+let libCtxTarget = null; // {cat, idx} — pre-placement library item being configured
+function showLibCtxMenu(e, cat, idx) {
+  if(!isHost) return;
+  e.preventDefault(); e.stopPropagation();
+  libCtxTarget = {cat, idx};
+  const item = S.library[cat][idx];
+  const curSize = item?.size || 'normal';
+  document.querySelectorAll('#lib-ctx-menu .lib-size-btn').forEach(b=>b.classList.toggle('active', b.dataset.size===curSize));
+  const menu = el('lib-ctx-menu');
+  menu.classList.add('open');
+  const mh=menu.offsetHeight, mw=menu.offsetWidth;
+  menu.style.left = Math.min(e.clientX, window.innerWidth-mw-6)+'px';
+  menu.style.top  = (e.clientY+mh>window.innerHeight-6 ? e.clientY-mh : e.clientY)+'px';
 }
 function removeLib(cid,idx) {
   const k={'lib-backdrops':'backdrops','lib-players':'players','lib-npcs':'npcs','lib-handouts':'handouts'}[cid];
@@ -2230,8 +2321,8 @@ async function handleUpload(files,cat) {
 }
 function applyBackdrop(item) { send({type:'set_backdrop', url:item.url}); }
 function applyHandout(item)  { send({type:'show_handout', url:item.url, name:item.name||'Handout'}); }
-function applyPlayer(item)   { send({type:'add_player', player:{id:uid(),name:item.name||'Player',avatar:item.url,flipped:false,cx:null,cy:null}}); }
-function applyNpc(item)      { send({type:'add_npc',    npc:  {id:uid(),name:item.name||'NPC',   avatar:item.url,flipped:false,cx:null,cy:null}}); }
+function applyPlayer(item)   { send({type:'add_player', player:{id:uid(),name:item.name||'Player',avatar:item.url,flipped:false,cx:null,cy:null,size:item.size||undefined}}); }
+function applyNpc(item)      { send({type:'add_npc',    npc:  {id:uid(),name:item.name||'NPC',   avatar:item.url,flipped:false,cx:null,cy:null,size:item.size||undefined}}); }
 
 // ── DICE ─────────────────────────────────────────────────────────
 const diceLog=[], LOG_MAX=10;
@@ -2634,6 +2725,82 @@ function snapAoeCoord(v) {
   return Math.abs(v - corner) <= Math.abs(v - center) ? corner : center;
 }
 function snapAoeXY(x,y){ return {x:snapAoeCoord(x), y:snapAoeCoord(y)}; }
+
+// ── TEXT TOOL ────────────────────────────────────────────────────
+let textToolActive = false;
+
+function placeCaretEnd(elNode) {
+  const range = document.createRange();
+  range.selectNodeContents(elNode); range.collapse(false);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+}
+
+function wireExistingTextItem(div, item) {
+  div.addEventListener('pointerdown', e=>{
+    if(div.isContentEditable) return; // mid-edit — let normal text selection/caret placement happen
+    if(e.button!==0) return;
+    e.preventDefault(); e.stopPropagation();
+    const startCanvas = toCanvas(e);
+    const origX=item.x, origY=item.y;
+    let moved=false;
+    div.classList.add('dragging');
+    function onMove(ev){
+      const cur=toCanvas(ev);
+      const dx=cur.x-startCanvas.x, dy=cur.y-startCanvas.y;
+      if(Math.hypot(dx,dy)>3) moved=true;
+      if(moved){ div.style.left=(origX+dx)+'px'; div.style.top=(origY+dy)+'px'; }
+    }
+    function onUp(ev){
+      document.removeEventListener('pointermove',onMove);
+      document.removeEventListener('pointerup',onUp);
+      div.classList.remove('dragging');
+      if(!moved) return;
+      const cur=toCanvas(ev);
+      const newX=origX+(cur.x-startCanvas.x), newY=origY+(cur.y-startCanvas.y);
+      send({type:'move_text', id:item.id, x:newX, y:newY});
+    }
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
+  });
+  div.addEventListener('dblclick', e=>{
+    e.preventDefault(); e.stopPropagation();
+    div.contentEditable='true';
+    div.focus();
+    placeCaretEnd(div);
+  });
+  div.addEventListener('blur', ()=>{
+    if(!div.isContentEditable) return; // only act if we were actually editing
+    const text = div.textContent.trim();
+    if(!text) { send({type:'remove_text', id:item.id}); return; }
+    div.contentEditable='false';
+    if(text !== item.text) send({type:'edit_text', id:item.id, text});
+  });
+  div.addEventListener('keydown', e=>{
+    if(e.key==='Escape'){ div.textContent=item.text; div.contentEditable='false'; div.blur(); }
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); div.blur(); }
+  });
+  div.addEventListener('contextmenu', e=>{
+    e.preventDefault(); e.stopPropagation();
+    if(div.isContentEditable) return;
+    send({type:'remove_text', id:item.id});
+  });
+}
+
+function renderTextLayer() {
+  const layer = el('text-layer'); if(!layer) return;
+  layer.innerHTML = '';
+  S.textItems.forEach(item=>{
+    const div = document.createElement('div');
+    div.className = 'text-item';
+    div.contentEditable = 'false';
+    div.dataset.textId = item.id;
+    div.style.left = item.x+'px';
+    div.style.top = item.y+'px';
+    div.textContent = item.text;
+    layer.appendChild(div);
+    wireExistingTextItem(div, item);
+  });
+}
 
 function renderAoeLayer() {
   const svg=el('aoe-layer'); if(!svg) return;
@@ -3232,10 +3399,19 @@ function scheduleFlip() {
     const id   = el('rename-prompt').dataset.pendingId;
     const type = el('rename-prompt').dataset.pendingType;
     const name = el('rename-prompt-input').value.trim();
-    if(!id||!name) { el('rename-prompt').classList.remove('open'); return; }
+    if(!name) { el('rename-prompt').classList.remove('open'); return; }
     if(type==='dm') {
       send({type:'set_dm_name', name});
-    } else {
+    } else if(type==='libitem') {
+      const cat = el('rename-prompt').dataset.pendingCat;
+      const idx = parseInt(el('rename-prompt').dataset.pendingIdx,10);
+      if(S.library[cat]?.[idx]) {
+        S.library[cat][idx].name = name;
+        renderLibraries();
+        // Intentionally NOT broadcast — pre-placement config stays host-local until the
+        // item is actually placed via add_player/add_npc, which carries name+size then.
+      }
+    } else if(id) {
       send({type:'rename_avatar', id, entityType:type, name});
     }
     el('rename-prompt').classList.remove('open');
@@ -3251,6 +3427,33 @@ function scheduleFlip() {
     el('confirm-prompt').classList.remove('open');
     confirmCallback=null;
   });
+  el('lib-ctx-rename').addEventListener('click', ()=>{
+    if(!libCtxTarget) return;
+    const {cat,idx} = libCtxTarget;
+    const item = S.library[cat][idx];
+    el('lib-ctx-menu').classList.remove('open');
+    el('rename-prompt-name').textContent = item?.name || 'Item';
+    el('rename-prompt-input').value = item?.name || '';
+    el('rename-prompt').dataset.pendingType = 'libitem';
+    el('rename-prompt').dataset.pendingCat  = cat;
+    el('rename-prompt').dataset.pendingIdx  = idx;
+    el('rename-prompt').classList.add('open');
+    setTimeout(()=>{ el('rename-prompt-input').select(); el('rename-prompt-input').focus(); }, 50);
+  });
+  document.querySelectorAll('#lib-ctx-menu .lib-size-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(!libCtxTarget) return;
+      const {cat,idx} = libCtxTarget;
+      if(S.library[cat]?.[idx]) {
+        S.library[cat][idx].size = btn.dataset.size;
+        document.querySelectorAll('#lib-ctx-menu .lib-size-btn').forEach(b=>b.classList.toggle('active', b===btn));
+        // Intentionally NOT broadcast — pre-placement config stays host-local until placed
+      }
+    });
+  });
+  document.addEventListener('pointerdown', e=>{
+    if(!e.target?.closest?.('#lib-ctx-menu')) el('lib-ctx-menu').classList.remove('open');
+  }, true);
   el('rename-prompt-input').addEventListener('keydown', e=>{
     if(e.key==='Enter') submitRename();
     if(e.key==='Escape') el('rename-prompt').classList.remove('open');
@@ -3435,6 +3638,35 @@ function scheduleFlip() {
   el('aoe-clear').addEventListener('click',()=>{
     clearAoeTool();
     if(isHost) send({type:'clear_aoe'});
+  });
+
+  // ── TEXT TOOL ─────────────────────────────────────────────────────
+  el('dm-text-btn').addEventListener('click', ()=>{
+    textToolActive = !textToolActive;
+    el('dm-text-btn').classList.toggle('active', textToolActive);
+    el('canvas').style.cursor = textToolActive ? 'text' : '';
+  });
+  el('canvas').addEventListener('mousedown', e=>{
+    if(e.button!==0 || !textToolActive) return;
+    if(e.target.closest('.text-item')) return; // existing item handles its own interaction
+    e.preventDefault();
+    const {x,y} = toCanvas(e);
+    const div = document.createElement('div');
+    div.className='text-item';
+    div.contentEditable='true';
+    div.style.left=x+'px'; div.style.top=y+'px';
+    el('text-layer').appendChild(div);
+    setTimeout(()=>{ div.focus(); }, 10);
+    div.addEventListener('blur', function onFirstBlur(){
+      div.removeEventListener('blur', onFirstBlur);
+      const text = div.textContent.trim();
+      if(!text){ div.remove(); return; }
+      send({type:'add_text', item:{id:uid(), x, y, text}}); // handleMsg pushes to S.textItems + re-renders
+    });
+    div.addEventListener('keydown', e2=>{
+      if(e2.key==='Escape'){ div.textContent=''; div.blur(); }
+      if(e2.key==='Enter' && !e2.shiftKey){ e2.preventDefault(); div.blur(); }
+    });
   });
 
   // Right-click canvas while AoE tool active → deselect tool only (keep placed shapes)
@@ -3680,12 +3912,16 @@ function scheduleFlip() {
     el('ctx-kill').style.display   = isAvatar ? 'block' : 'none';
     el('ctx-rename').style.display = 'block';
     el('ctx-torch').style.display  = 'block';
+    el('ctx-downed').style.display = isAvatar ? 'block' : 'none';
     if(isAvatar) {
       const arr0 = entityType==='player' ? S.players : S.npcs;
       const obj0 = arr0.find(o=>o.id===id);
       const torchOn = obj0?.torch===true;
       el('ctx-torch').textContent = '🔥 Torch: ' + (torchOn?'On':'Off');
       el('ctx-torch').classList.toggle('torch-on', torchOn);
+      const downedOn = obj0?.downed===true;
+      el('ctx-downed').textContent = '❌ Downed: ' + (downedOn?'On':'Off');
+      el('ctx-downed').classList.toggle('downed-on', downedOn);
     }
     el('ctx-style-sep').style.display = isAvatar ? 'block' : 'none';
     document.querySelectorAll('.ctx-mini, .ctx-swatch-row, .ctx-icon-row').forEach(m=>m.style.display=isAvatar?'':'none');
@@ -3757,6 +3993,7 @@ function scheduleFlip() {
     el('ctx-kill').style.display='none';
     el('ctx-rename').style.display='block';
     el('ctx-torch').style.display='block';
+    el('ctx-downed').style.display='none';
     el('ctx-torch').textContent = '🔥 Torch: ' + (S.dmTorch?'On':'Off');
     el('ctx-torch').classList.toggle('torch-on', S.dmTorch);
     el('ctx-style-sep').style.display='none';
@@ -3839,6 +4076,15 @@ function scheduleFlip() {
       nextState = !(obj?.torch===true);
     }
     send({type:'set_torch', entityType:ctxTarget.entityType, id:ctxTarget.id, active:nextState});
+    el('ctx-menu').classList.remove('open');
+    ctxTarget=null;
+  });
+  el('ctx-downed').addEventListener('click',()=>{
+    if(!ctxTarget||ctxTarget.entityType==='dm') return;
+    const arr=(ctxTarget.entityType==='player'?S.players:S.npcs);
+    const obj=arr.find(o=>o.id===ctxTarget.id);
+    const nextState=!(obj?.downed===true);
+    send({type:'set_downed', entityType:ctxTarget.entityType, id:ctxTarget.id, active:nextState});
     el('ctx-menu').classList.remove('open');
     ctxTarget=null;
   });
