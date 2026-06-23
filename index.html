@@ -986,6 +986,7 @@ body.combat #aoe-layer { display:block; }
 
 <!-- CONTEXT MENU -->
 <div id="ctx-menu">
+  <div class="ctx-item" id="ctx-delete">🗑 Delete</div>
   <div class="ctx-item" id="ctx-kill">⚔ Kill</div>
   <div class="ctx-item" id="ctx-rename">✏ Rename</div>
   <div class="ctx-item" id="ctx-torch">🔥 Torch: Off</div>
@@ -1959,8 +1960,19 @@ function makeAvatarEl(obj,removeType) {
         return;
       }
     });
-    wrap.addEventListener('dragstart',e=>{ zoneSwapDrag={id:obj.id,entityType,obj}; e.dataTransfer.setData('text/plain','zone-swap'); e.dataTransfer.effectAllowed='move'; e.stopPropagation(); });
-    wrap.addEventListener('dragend',()=>{ zoneSwapDrag=null; });
+    wrap.addEventListener('dragstart',e=>{
+      zoneSwapDrag={id:obj.id,entityType,obj};
+      e.dataTransfer.setData('text/plain','zone-swap'); e.dataTransfer.effectAllowed='move'; e.stopPropagation();
+      // Zones default to pointer-events:none so empty space passes through to the canvas (ping/draw/etc).
+      // While actively dragging, open up the whole band so empty zones are valid drop targets too.
+      el('upper-zone').style.pointerEvents='all';
+      el('lower-zone').style.pointerEvents='all';
+    });
+    wrap.addEventListener('dragend',()=>{
+      zoneSwapDrag=null;
+      el('upper-zone').style.pointerEvents='';
+      el('lower-zone').style.pointerEvents='';
+    });
     frame.addEventListener('contextmenu',e=>window._showCtxMenu&&window._showCtxMenu(e,entityType,obj.id,frame));
     frame.addEventListener('dblclick',e=>{ e.preventDefault(); send({type:'flip_avatar',id:obj.id,flipped:!obj.flipped}); });
     frame.addEventListener('click',e=>{ if(e.ctrlKey||e.metaKey){ e.preventDefault(); e.stopPropagation(); _promptInitiative(obj,entityType); } });
@@ -2148,8 +2160,8 @@ function enterCombat() {
 }
 
 function exitCombat() {
-  // Clear all combat positions — next entry recalculates from scratch
-  [...S.players, ...S.npcs].forEach(o=>{ o.cx=null; o.cy=null; });
+  // Clear all combat positions AND initiative — theatre mode should never carry rank badges
+  [...S.players, ...S.npcs].forEach(o=>{ o.cx=null; o.cy=null; delete o.initiative; delete o._initRank; });
 
   el('combat-arena').innerHTML = '';
 
@@ -3664,6 +3676,7 @@ function scheduleFlip() {
     e.preventDefault(); e.stopPropagation();
     ctxTarget = { entityType, id, domEl };
     const isAvatar = entityType !== 'dm';
+    el('ctx-delete').style.display = isAvatar ? 'block' : 'none';
     el('ctx-kill').style.display   = isAvatar ? 'block' : 'none';
     el('ctx-rename').style.display = 'block';
     el('ctx-torch').style.display  = 'block';
@@ -3740,6 +3753,7 @@ function scheduleFlip() {
     if(!isHost) return;
     e.preventDefault(); e.stopPropagation();
     ctxTarget={entityType:'dm',id:'__dm__',domEl:null};
+    el('ctx-delete').style.display='none';
     el('ctx-kill').style.display='none';
     el('ctx-rename').style.display='block';
     el('ctx-torch').style.display='block';
@@ -3787,6 +3801,11 @@ function scheduleFlip() {
     send({ type: 'blood_splat', cx, cy });
   }
 
+  el('ctx-delete').addEventListener('click',()=>{
+    if(!ctxTarget) return;
+    send({ type: ctxTarget.entityType==='player' ? 'remove_player' : 'remove_npc', id:ctxTarget.id });
+    ctxTarget=null;
+  });
   el('ctx-kill').addEventListener('click',()=>{
     if(!ctxTarget) return;
     killAvatar(ctxTarget.entityType, ctxTarget.id, ctxTarget.domEl);
