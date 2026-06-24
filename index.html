@@ -210,22 +210,27 @@ body.panel-open #toolbar { right:294px; }
 /* ── VOLUME BAR ── */
 #volume-bar {
   position:fixed; top:58px; right:14px; z-index:25;
-  display:flex; align-items:center; gap:7px;
+  display:flex; flex-direction:column; gap:5px;
   background:rgba(0,0,0,.6); border:1px solid var(--border);
-  border-radius:20px; padding:4px 11px;
+  border-radius:10px; padding:7px 11px;
   transition:right .25s;
 }
-#volume-icon { font-size:12px; color:var(--gold-dim); cursor:pointer; user-select:none; }
-#volume-slider {
+.vol-row { display:flex; align-items:center; gap:6px; }
+.vol-label {
+  font-family:'Cinzel',var(--font-display); font-size:9px; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--text-dim); width:40px; flex-shrink:0;
+}
+#volume-icon, #sfx-icon { font-size:12px; color:var(--gold-dim); cursor:pointer; user-select:none; flex-shrink:0; }
+#volume-slider, #sfx-slider {
   -webkit-appearance:none; appearance:none;
-  width:130px; height:3px; border-radius:2px; outline:none; cursor:pointer;
+  width:110px; height:3px; border-radius:2px; outline:none; cursor:pointer;
   background:linear-gradient(to right, var(--gold-dim) 0%, var(--gold-dim) var(--vol), #333 var(--vol), #333 100%);
 }
-#volume-slider::-webkit-slider-thumb {
+#volume-slider::-webkit-slider-thumb, #sfx-slider::-webkit-slider-thumb {
   -webkit-appearance:none; width:12px; height:12px; border-radius:50%;
   background:var(--gold); cursor:pointer;
 }
-#volume-slider::-moz-range-thumb {
+#volume-slider::-moz-range-thumb, #sfx-slider::-moz-range-thumb {
   width:12px; height:12px; border-radius:50%;
   background:var(--gold); cursor:pointer; border:none;
 }
@@ -896,7 +901,7 @@ body.browser-mode.tp-collapsed #bottom-bar { left:50%; }
 
 /* ── AOE TOOLBAR — left side, vertical ── */
 #aoe-toolbar {
-  position:fixed; left:16px; top:calc(50% - 100px); transform:translateY(-50%);
+  position:fixed; left:16px; top:50%; transform:translateY(-50%);
   z-index:20; display:none; flex-direction:column; align-items:center; gap:5px;
   background:var(--panel-bg); border:1px solid var(--border);
   border-radius:8px; padding:8px 5px;
@@ -1206,8 +1211,16 @@ body.combat #aoe-layer { display:block; }
 
 <!-- VOLUME BAR -->
 <div id="volume-bar">
-  <span id="volume-icon">🔊</span>
-  <input type="range" id="volume-slider" min="0" max="100" value="30" style="--vol:30%">
+  <div class="vol-row">
+    <span id="volume-icon">🔊</span>
+    <span class="vol-label">Music</span>
+    <input type="range" id="volume-slider" min="0" max="100" value="30" style="--vol:30%">
+  </div>
+  <div class="vol-row">
+    <span id="sfx-icon">🔊</span>
+    <span class="vol-label">Effects</span>
+    <input type="range" id="sfx-slider" min="0" max="100" value="60" style="--vol:60%">
+  </div>
 </div>
 
 <!-- MUSIC PANEL -->
@@ -2720,10 +2733,11 @@ function addLogEntry(sides,rolls,total,mode,mod,name) {
 }
 
 // ── AUDIO ─────────────────────────────────────────────────────────
+let sfxVolume = 0.6; // controlled by the Effects slider, independent of music volume
 function playSound(name, vol=1) {
   try {
     const a = new Audio('sounds/' + name + '.m4a');
-    a.volume = vol;
+    a.volume = Math.min(1, vol * sfxVolume);
     a.play().catch(()=>{});
   } catch(e) {}
 }
@@ -3661,6 +3675,19 @@ function scheduleFlip() {
   el('volume-icon').addEventListener('click', ()=>{
     volSlider.value = volSlider.value > 0 ? 0 : 30;
     applyVolume();
+  });
+
+  // ── SFX SLIDER (all players) — independent of music volume ────────
+  const sfxSlider = el('sfx-slider');
+  function applySfxVolume() {
+    sfxVolume = sfxSlider.value / 100;
+    sfxSlider.style.setProperty('--vol', sfxSlider.value + '%');
+    el('sfx-icon').textContent = sfxVolume === 0 ? '🔇' : sfxVolume < 0.4 ? '🔉' : '🔊';
+  }
+  sfxSlider.addEventListener('input', applySfxVolume);
+  el('sfx-icon').addEventListener('click', ()=>{
+    sfxSlider.value = sfxSlider.value > 0 ? 0 : 60;
+    applySfxVolume();
   });
 
   // ── MUSIC ─────────────────────────────────────────────────────────
