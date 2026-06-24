@@ -2534,6 +2534,7 @@ function showDeathPopup(name) {
   clearTimeout(deathPopTimer);
   deathPopTimer=setTimeout(()=>p.classList.remove('visible'), 4000);
   playSound('nat', 0.7);
+  playSound('intro-chord', 0.5);
 }
 
 let currentDiceFill = '#f5f0e0'; // tracks active palette fill for log colouring
