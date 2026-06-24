@@ -2340,20 +2340,37 @@ async function handleUpload(files,cat) {
 function applyBackdrop(item) { send({type:'set_backdrop', url:item.url}); }
 function applyHandout(item)  { send({type:'show_handout', url:item.url, name:item.name||'Handout'}); }
 function applyPlayer(item)   { send({type:'add_player', player:{id:uid(),name:item.name||'Player',avatar:item.url,flipped:false,cx:null,cy:null,size:item.size||undefined}}); }
+let npcOverflowCount = 0; // only used once the column is fully saturated top-to-bottom
+
 function nextNpcCombatY(h) {
   const centerY = GRID_H/2;
   const positioned = S.npcs.filter(n=>n.cx!=null);
-  if(positioned.length===0) return clamp(snap(centerY - h/2), 0, GRID_H-h); // first arrival starts dead-center
+  if(positioned.length===0){ npcOverflowCount=0; return clamp(snap(centerY - h/2), 0, GRID_H-h); }
+
   let topEdge=Infinity, botEdge=-Infinity;
   positioned.forEach(n=>{
     const nh = n.size==='large' ? 2*CELL : CELL;
     topEdge = Math.min(topEdge, n.cy);
     botEdge = Math.max(botEdge, n.cy+nh);
   });
-  const aboveExtent = centerY - topEdge, belowExtent = botEdge - centerY;
-  return aboveExtent <= belowExtent
-    ? clamp(snap(topEdge - h), 0, GRID_H-h)   // cluster is top-heavy or balanced — grow upward
-    : clamp(snap(botEdge),     0, GRID_H-h);  // cluster is bottom-heavy — grow downward
+  const canGrowUp = (topEdge-h) >= 0, canGrowDown = (botEdge+h) <= GRID_H;
+
+  if(canGrowUp || canGrowDown){
+    npcOverflowCount = 0; // room remains — normal tier, keep the overflow cycle primed for next time
+    const aboveExtent = centerY-topEdge, belowExtent = botEdge-centerY;
+    const preferUp = aboveExtent <= belowExtent;
+    if(preferUp && canGrowUp)   return clamp(snap(topEdge-h), 0, GRID_H-h);
+    if(!preferUp && canGrowDown) return clamp(snap(botEdge),  0, GRID_H-h);
+    return canGrowUp ? clamp(snap(topEdge-h),0,GRID_H-h) : clamp(snap(botEdge),0,GRID_H-h);
+  }
+
+  // Column fully saturated top-to-bottom — no empty cells remain anywhere.
+  // Reset and start a fresh center-out cycle (necessarily overlapping the existing wave).
+  npcOverflowCount++;
+  const n = npcOverflowCount-1;
+  const mag = Math.ceil(n/2);
+  const sign = n===0 ? 0 : (n%2===1 ? -1 : 1);
+  return clamp(snap(centerY - h/2 + sign*mag*h), 0, GRID_H-h);
 }
 function applyNpc(item) {
   const npc = {id:uid(), name:item.name||'NPC', avatar:item.url, flipped:false, cx:null, cy:null, size:item.size||undefined};
