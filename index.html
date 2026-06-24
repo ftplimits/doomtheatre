@@ -2340,19 +2340,30 @@ async function handleUpload(files,cat) {
 function applyBackdrop(item) { send({type:'set_backdrop', url:item.url}); }
 function applyHandout(item)  { send({type:'show_handout', url:item.url, name:item.name||'Handout'}); }
 function applyPlayer(item)   { send({type:'add_player', player:{id:uid(),name:item.name||'Player',avatar:item.url,flipped:false,cx:null,cy:null,size:item.size||undefined}}); }
+function nextNpcCombatY(h) {
+  const centerY = GRID_H/2;
+  const positioned = S.npcs.filter(n=>n.cx!=null);
+  if(positioned.length===0) return clamp(snap(centerY - h/2), 0, GRID_H-h); // first arrival starts dead-center
+  let topEdge=Infinity, botEdge=-Infinity;
+  positioned.forEach(n=>{
+    const nh = n.size==='large' ? 2*CELL : CELL;
+    topEdge = Math.min(topEdge, n.cy);
+    botEdge = Math.max(botEdge, n.cy+nh);
+  });
+  const aboveExtent = centerY - topEdge, belowExtent = botEdge - centerY;
+  return aboveExtent <= belowExtent
+    ? clamp(snap(topEdge - h), 0, GRID_H-h)   // cluster is top-heavy or balanced — grow upward
+    : clamp(snap(botEdge),     0, GRID_H-h);  // cluster is bottom-heavy — grow downward
+}
 function applyNpc(item) {
   const npc = {id:uid(), name:item.name||'NPC', avatar:item.url, flipped:false, cx:null, cy:null, size:item.size||undefined};
   if(S.combatMode) {
-    // Mid-fight reinforcement: stack below the lowest existing NPC in their column
-    // instead of leaving cx/cy null (which would only place it once combat is re-entered).
+    // Mid-fight reinforcement: expand outward from board-center, alternating top/bottom,
+    // matching the same "center out" look as the bulk theatre→combat placement.
     const npcX = (COLS-3)*CELL;
     const h = npc.size==='large' ? 2*CELL : CELL;
-    let maxBottom = 0;
-    S.npcs.forEach(n=>{
-      if(n.cx!=null){ const nh = n.size==='large'?2*CELL:CELL; maxBottom = Math.max(maxBottom, n.cy+nh); }
-    });
     npc.cx = npcX;
-    npc.cy = clamp(maxBottom, 0, GRID_H-h);
+    npc.cy = nextNpcCombatY(h);
   }
   send({type:'add_npc', npc});
 }
