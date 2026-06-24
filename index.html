@@ -118,8 +118,8 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
   width:32px; height:32px; display:none;
   align-items:center; justify-content:center;
 }
-.hp-badge { left:1px; }
-.ac-badge { right:1px; }
+.hp-badge { left:-3px; }
+.ac-badge { right:-3px; }
 .ca-wrap.is-player.hp-on .hp-badge,
 .ca-wrap.is-player.ac-on .ac-badge { display:flex; }
 .badge-shape {
@@ -2217,8 +2217,9 @@ function wireBadgeEditors(frame, entityType, obj) {
 function updateBadgeDisplay(id) {
   document.querySelectorAll(`[data-av-id="${id}"]`).forEach(frame=>{
     const obj = S.players.find(p=>p.id===id); if(!obj) return;
-    const hpVal = frame.querySelector('.hp-value'); if(hpVal) hpVal.textContent = obj.hp ?? 10;
-    const acVal = frame.querySelector('.ac-value'); if(acVal) acVal.textContent = obj.ac ?? 10;
+    const wrap = frame.closest('.ca-wrap,.av-wrap'); if(!wrap) return;
+    const hpVal = wrap.querySelector('.hp-value'); if(hpVal) hpVal.textContent = obj.hp ?? 10;
+    const acVal = wrap.querySelector('.ac-value'); if(acVal) acVal.textContent = obj.ac ?? 10;
   });
 }
 
@@ -2375,13 +2376,21 @@ function makeCombatAv(obj, entityType, idx) {
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=(obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`)
-    +downedOverlayMarkup(entityType, obj)
-    +hpAcBadgeMarkup(entityType, obj);
+    +downedOverlayMarkup(entityType, obj);
   wireDeathSaveDots(frame, entityType, obj);
-  wireBadgeEditors(frame, entityType, obj);
 
   _applyAvatarStyle(frame, obj);
   wrap.appendChild(frame);
+
+  // HP/AC badges are appended to WRAP, not FRAME — frame gets scaleX(-1) when flipped,
+  // which would mirror both badge position AND the number text. Living on the wrap
+  // keeps them correctly placed and readable regardless of avatar flip state.
+  if(entityType==='player') {
+    const badgeHolder = document.createElement('div');
+    badgeHolder.innerHTML = hpAcBadgeMarkup(entityType, obj);
+    while(badgeHolder.firstChild) wrap.appendChild(badgeHolder.firstChild);
+    wireBadgeEditors(wrap, entityType, obj);
+  }
 
   // Name bar AFTER frame so it sits below the avatar image in the flex column
   if(obj.name){
