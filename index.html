@@ -111,6 +111,35 @@ body.combat #upper-zone, body.combat #lower-zone { display:none; }
 .ds-pass .ds-dot.filled { background:#3ec96b; box-shadow:0 0 4px rgba(62,201,107,.8); }
 .ds-fail .ds-dot { color:#e84b4b; }
 .ds-fail .ds-dot.filled { background:#e84b4b; box-shadow:0 0 4px rgba(232,75,75,.8); }
+
+/* ── HP / AC TRACKERS (combat mode, players only) ── */
+.hp-badge, .ac-badge {
+  position:absolute; bottom:14px; z-index:7;
+  width:26px; height:26px; display:none;
+  align-items:center; justify-content:center;
+}
+.hp-badge { left:1px; }
+.ac-badge { right:1px; }
+.ca-wrap.is-player.hp-on .hp-badge,
+.ca-wrap.is-player.ac-on .ac-badge { display:flex; }
+.badge-shape {
+  position:absolute; inset:0; width:100%; height:100%;
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));
+}
+.hp-shape { fill:#d63838; stroke:#7a1414; stroke-width:0.7; }
+.ac-shape { fill:#3a78d6; stroke:#15355e; stroke-width:0.7; }
+.badge-value {
+  position:relative; z-index:1; margin-top:3px;
+  font-family:'Cinzel',var(--font-display); font-weight:700; font-size:10px;
+  color:#fff; text-shadow:0 1px 2px rgba(0,0,0,1); cursor:pointer; pointer-events:all;
+  user-select:none;
+}
+.badge-edit-input {
+  position:relative; z-index:8; width:30px; margin-top:3px;
+  font-size:9px; text-align:center; font-family:'Cinzel',var(--font-display);
+  background:rgba(0,0,0,.9); color:#fff; border:1px solid var(--gold-dim);
+  border-radius:3px; padding:1px 2px; pointer-events:all;
+}
 .av-label { font-family:'Cinzel',var(--font-display); font-size:15px; letter-spacing:.08em; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,.9); text-align:center; width:250px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; background:rgba(0,0,0,.5); border-radius:4px; padding:2px 10px; }@keyframes av-enter-bottom { from{opacity:0;transform:translateY(80px) scale(.85)} to{opacity:1;transform:translateY(0) scale(1)} }
 @keyframes av-enter-top    { from{opacity:0;transform:translateY(-80px) scale(.85)} to{opacity:1;transform:translateY(0) scale(1)} }
 #lower-zone .av-wrap { animation:av-enter-bottom .5s cubic-bezier(.34,1.3,.64,1) both; }
@@ -382,6 +411,10 @@ body.panel-open #dice-log { right:301px; }
 #ctx-torch.torch-on:hover { background:rgba(180,100,0,.3); color:#ffd080; }
 #ctx-downed.downed-on { color:#ff6666; }
 #ctx-downed.downed-on:hover { background:rgba(180,30,30,.3); color:#ff9999; }
+#ctx-hp-track.hp-on { color:#ff8585; }
+#ctx-hp-track.hp-on:hover { background:rgba(180,30,30,.3); color:#ffb0b0; }
+#ctx-ac-track.ac-on { color:#7aaeff; }
+#ctx-ac-track.ac-on:hover { background:rgba(40,90,180,.3); color:#a8caff; }
 
 /* ── LIBRARY ITEM PRE-PLACEMENT MENU ── */
 #lib-ctx-menu {
@@ -1069,6 +1102,8 @@ body.combat #aoe-layer { display:block; }
   <div class="ctx-item" id="ctx-rename">✏ Rename</div>
   <div class="ctx-item" id="ctx-torch">🔥 Torch: Off</div>
   <div class="ctx-item" id="ctx-downed">❌ Downed: Off</div>
+  <div class="ctx-item" id="ctx-hp-track">❤️ HP Tracking: Off</div>
+  <div class="ctx-item" id="ctx-ac-track">🛡️ AC Tracking: Off</div>
   <div class="ctx-sep"  id="ctx-style-sep"></div>
   <div class="ctx-mini">Border</div>
   <div class="ctx-swatch-row" id="ctx-border-row"></div>
@@ -2000,6 +2035,36 @@ function handleMsg(msg,fromConn) {
       updateDeathSaveDots(msg.id);
       if(isHost) broadcast(msg,fromConn); break;
     }
+    case 'set_hp_tracking': {
+      const objH=S.players.find(o=>o.id===msg.id);
+      if(objH) { objH.hpEnabled=msg.active; if(msg.active && objH.hp==null) objH.hp=10; }
+      document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
+        const wrap=frame.closest('.ca-wrap'); if(wrap) wrap.classList.toggle('hp-on', msg.active);
+      });
+      updateBadgeDisplay(msg.id);
+      if(isHost) broadcast(msg,fromConn); break;
+    }
+    case 'set_armor_tracking': {
+      const objA=S.players.find(o=>o.id===msg.id);
+      if(objA) { objA.acEnabled=msg.active; if(msg.active && objA.ac==null) objA.ac=10; }
+      document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
+        const wrap=frame.closest('.ca-wrap'); if(wrap) wrap.classList.toggle('ac-on', msg.active);
+      });
+      updateBadgeDisplay(msg.id);
+      if(isHost) broadcast(msg,fromConn); break;
+    }
+    case 'set_hp_value': {
+      const objHv=S.players.find(o=>o.id===msg.id);
+      if(objHv) objHv.hp=msg.value;
+      updateBadgeDisplay(msg.id);
+      if(isHost) broadcast(msg,fromConn); break;
+    }
+    case 'set_ac_value': {
+      const objAv=S.players.find(o=>o.id===msg.id);
+      if(objAv) objAv.ac=msg.value;
+      updateBadgeDisplay(msg.id);
+      if(isHost) broadcast(msg,fromConn); break;
+    }
     case 'sync_library':    S.library=msg.library; renderLibraries(); break;
     case 'add_text':    S.textItems.push(msg.item); renderTextLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'edit_text':    { const t=S.textItems.find(t=>t.id===msg.id); if(t) t.text=msg.text; renderTextLayer(); if(isHost) broadcast(msg,fromConn); break; }
@@ -2081,6 +2146,79 @@ function updateDeathSaveDots(id) {
     const p = obj.deathSavePass||0, f = obj.deathSaveFail||0;
     frame.querySelectorAll('.ds-pass .ds-dot').forEach((d,i)=>d.classList.toggle('filled', i<p));
     frame.querySelectorAll('.ds-fail .ds-dot').forEach((d,i)=>d.classList.toggle('filled', i<f));
+  });
+}
+
+// ── HP / AC TRACKERS (combat mode, players only) ─────────────────
+function hpAcBadgeMarkup(entityType, obj) {
+  if(entityType!=='player') return '';
+  const hp = obj.hp ?? 10, ac = obj.ac ?? 10;
+  return `<div class="hp-badge">
+      <svg class="badge-shape hp-shape" viewBox="0 0 24 24"><path d="M12 21s-8-5.3-8-11.2C4 6.1 6.6 4 9.6 4c1.7 0 3.2.9 2.4 3.1C12.8 4.9 14.3 4 16 4c3 0 5.6 2.1 5.6 5.8C21.6 15.7 12 21 12 21z"/></svg>
+      <span class="badge-value hp-value">${hp}</span>
+    </div>
+    <div class="ac-badge">
+      <svg class="badge-shape ac-shape" viewBox="0 0 24 24"><path d="M12 2.5l7.5 2.8v5.8c0 5-3.3 8.6-7.5 10.4-4.2-1.8-7.5-5.4-7.5-10.4V5.3L12 2.5z"/></svg>
+      <span class="badge-value ac-value">${ac}</span>
+    </div>`;
+}
+function parseSmartNumber(raw, current) {
+  const trimmed = raw.trim();
+  const n = parseInt(trimmed,10);
+  if(isNaN(n)) return current;
+  return (trimmed[0]==='+'||trimmed[0]==='-') ? current+n : n;
+}
+function openBadgeEditor(kind, id, valueEl) {
+  const obj = S.players.find(p=>p.id===id); if(!obj) return;
+  const key = kind==='hp' ? 'hp' : 'ac';
+  const cur = obj[key] ?? 10;
+  const input = document.createElement('input');
+  input.type='text'; input.className='badge-edit-input'; input.value='';
+  input.placeholder=String(cur);
+  valueEl.style.display='none';
+  valueEl.insertAdjacentElement('afterend', input);
+  setTimeout(()=>{ input.focus(); }, 10);
+  let done=false;
+  function commit(){
+    if(done) return; done=true;
+    const raw=input.value;
+    input.remove();
+    valueEl.style.display='';
+    if(!raw.trim()) return; // empty — cancel, no change
+    const next = parseSmartNumber(raw, cur);
+    send({type: kind==='hp' ? 'set_hp_value' : 'set_ac_value', id, value:next});
+  }
+  function cancel(){
+    if(done) return; done=true;
+    input.remove();
+    valueEl.style.display='';
+  }
+  input.addEventListener('pointerdown', e=>e.stopPropagation());
+  input.addEventListener('keydown', e=>{
+    e.stopPropagation();
+    if(e.key==='Enter'){ e.preventDefault(); commit(); }
+    if(e.key==='Escape'){ e.preventDefault(); cancel(); }
+  });
+  input.addEventListener('blur', commit);
+}
+function wireBadgeEditors(frame, entityType, obj) {
+  if(entityType!=='player') return;
+  const hpVal = frame.querySelector('.hp-value');
+  const acVal = frame.querySelector('.ac-value');
+  if(hpVal) {
+    hpVal.addEventListener('pointerdown', e=>e.stopPropagation());
+    hpVal.addEventListener('dblclick', e=>{ e.preventDefault(); e.stopPropagation(); openBadgeEditor('hp', obj.id, hpVal); });
+  }
+  if(acVal) {
+    acVal.addEventListener('pointerdown', e=>e.stopPropagation());
+    acVal.addEventListener('dblclick', e=>{ e.preventDefault(); e.stopPropagation(); openBadgeEditor('ac', obj.id, acVal); });
+  }
+}
+function updateBadgeDisplay(id) {
+  document.querySelectorAll(`[data-av-id="${id}"]`).forEach(frame=>{
+    const obj = S.players.find(p=>p.id===id); if(!obj) return;
+    const hpVal = frame.querySelector('.hp-value'); if(hpVal) hpVal.textContent = obj.hp ?? 10;
+    const acVal = frame.querySelector('.ac-value'); if(acVal) acVal.textContent = obj.ac ?? 10;
   });
 }
 
@@ -2228,6 +2366,8 @@ function makeCombatAv(obj, entityType, idx) {
   else if(obj.size==='small') wrap.classList.add('ca-small');
   if(entityType==='player') wrap.classList.add('is-player');
   if(obj.downed===true) wrap.classList.add('downed');
+  if(obj.hpEnabled===true) wrap.classList.add('hp-on');
+  if(obj.acEnabled===true) wrap.classList.add('ac-on');
   wrap.style.left=obj.cx+'px'; wrap.style.top=obj.cy+'px';
   wrap.style.animationDelay=(idx*0.08)+'s';
 
@@ -2235,8 +2375,10 @@ function makeCombatAv(obj, entityType, idx) {
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
   frame.innerHTML=(obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`)
-    +downedOverlayMarkup(entityType, obj);
+    +downedOverlayMarkup(entityType, obj)
+    +hpAcBadgeMarkup(entityType, obj);
   wireDeathSaveDots(frame, entityType, obj);
+  wireBadgeEditors(frame, entityType, obj);
 
   _applyAvatarStyle(frame, obj);
   wrap.appendChild(frame);
@@ -4121,6 +4263,16 @@ function scheduleFlip() {
 
     const isPlayer = entityType === 'player';
     const isDm     = entityType === 'dm';
+    el('ctx-hp-track').style.display = isPlayer ? 'block' : 'none';
+    el('ctx-ac-track').style.display = isPlayer ? 'block' : 'none';
+    if(isPlayer) {
+      const objP = S.players.find(o=>o.id===id);
+      const hpOn = objP?.hpEnabled===true, acOn = objP?.acEnabled===true;
+      el('ctx-hp-track').textContent = '❤️ HP Tracking: ' + (hpOn?'On':'Off');
+      el('ctx-hp-track').classList.toggle('hp-on', hpOn);
+      el('ctx-ac-track').textContent = '🛡️ AC Tracking: ' + (acOn?'On':'Off');
+      el('ctx-ac-track').classList.toggle('ac-on', acOn);
+    }
     el('ctx-alt-sep').style.display   = (isPlayer||isDm) ? 'block' : 'none';
     el('ctx-alt-img').style.display   = (isPlayer||isDm) ? 'block' : 'none';
     el('ctx-clear-alt').style.display = (isPlayer||isDm) ? 'block' : 'none';
@@ -4187,6 +4339,8 @@ function scheduleFlip() {
     el('ctx-rename').style.display='block';
     el('ctx-torch').style.display='block';
     el('ctx-downed').style.display='none';
+    el('ctx-hp-track').style.display='none';
+    el('ctx-ac-track').style.display='none';
     el('ctx-torch').textContent = '🔥 Torch: ' + (S.dmTorch?'On':'Off');
     el('ctx-torch').classList.toggle('torch-on', S.dmTorch);
     el('ctx-style-sep').style.display='none';
@@ -4283,6 +4437,22 @@ function scheduleFlip() {
     const obj=arr.find(o=>o.id===ctxTarget.id);
     const nextState=!(obj?.downed===true);
     send({type:'set_downed', entityType:ctxTarget.entityType, id:ctxTarget.id, active:nextState});
+    el('ctx-menu').classList.remove('open');
+    ctxTarget=null;
+  });
+  el('ctx-hp-track').addEventListener('click',()=>{
+    if(!ctxTarget||ctxTarget.entityType!=='player') return;
+    const obj=S.players.find(o=>o.id===ctxTarget.id);
+    const nextState=!(obj?.hpEnabled===true);
+    send({type:'set_hp_tracking', id:ctxTarget.id, active:nextState});
+    el('ctx-menu').classList.remove('open');
+    ctxTarget=null;
+  });
+  el('ctx-ac-track').addEventListener('click',()=>{
+    if(!ctxTarget||ctxTarget.entityType!=='player') return;
+    const obj=S.players.find(o=>o.id===ctxTarget.id);
+    const nextState=!(obj?.acEnabled===true);
+    send({type:'set_armor_tracking', id:ctxTarget.id, active:nextState});
     el('ctx-menu').classList.remove('open');
     ctxTarget=null;
   });
