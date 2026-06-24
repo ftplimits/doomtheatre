@@ -700,9 +700,9 @@ body.night #night-canvas { display:block; }
 
 /* ── HANDOUT LOG (players only) ── */
 #handout-log {
-  position:fixed; bottom:32px; left:16px; z-index:60;
+  position:fixed; bottom:0; left:0; z-index:60;
   display:none; flex-direction:column; gap:4px;
-  pointer-events:all;
+  padding:8px 10px; pointer-events:all;
 }
 #handout-log.visible { display:flex; }
 .hl-title {
@@ -710,8 +710,8 @@ body.night #night-canvas { display:block; }
   letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim);
 }
 #handout-log-items {
-  display:flex; flex-direction:column; gap:4px;
-  max-height:260px; overflow-y:auto;
+  display:flex; flex-direction:row; gap:4px;
+  max-width:calc(100vw - 40px); overflow-x:auto;
 }
 .hl-thumb {
   width:56px; height:56px; cursor:pointer; flex-shrink:0;
@@ -863,7 +863,7 @@ body.browser-mode.tp-collapsed #bottom-bar { left:50%; }
 
 /* ── AOE TOOLBAR — left side, vertical ── */
 #aoe-toolbar {
-  position:fixed; left:16px; top:calc(50% - 200px); transform:translateY(-50%);
+  position:fixed; left:16px; top:calc(50% - 100px); transform:translateY(-50%);
   z-index:20; display:none; flex-direction:column; align-items:center; gap:5px;
   background:var(--panel-bg); border:1px solid var(--border);
   border-radius:8px; padding:8px 5px;
