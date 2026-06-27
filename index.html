@@ -3480,6 +3480,19 @@ function scheduleFlip() {
     isDiscord = true;
     document.body.classList.add('discord-mode');
     await startDiscordSession(instanceId);
+  } else if(window.self !== window.top) {
+    // We're inside an iframe (so this is almost certainly a real Discord Activity launch)
+    // but no instance_id arrived in the URL — Discord failed to pass session info correctly.
+    // Showing the dev test panel here would be actively misleading, since clicking Host/Join
+    // manually just creates an isolated room disconnected from everyone else's real session.
+    console.error('[DooM Theatre] In an iframe but no instance_id found in URL — Discord did not deliver session info correctly.');
+    const ov = el('loading-overlay');
+    if(ov) {
+      ov.classList.remove('hidden');
+      el('loading-text').textContent = 'Session Not Detected';
+      el('loading-subtext').textContent = 'Fully close this Activity and reopen it from the voice channel — Discord didn\'t pass session info correctly this time.';
+      el('loading-subtext').classList.add('show');
+    }
   } else {
     document.body.classList.add('browser-mode');
     el('test-panel').style.display='flex';
