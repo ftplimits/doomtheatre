@@ -7,7 +7,15 @@
 <script src="discord-sdk.js"></script>
 <script src="peerjs.min.js"></script>
 <style>
-
+/* Fonts self-hosted — Discord CSP blocks external font CDNs.
+   Drop Cinzel.woff2 + IMFellEnglish.woff2 into the repo and
+   uncomment the @font-face blocks below to restore exact styling.
+@font-face { font-family:'Cinzel'; font-weight:400 900;
+  src: url('Cinzel.woff2') format('woff2'); }
+@font-face { font-family:'IM Fell English';
+  src: url('IMFellEnglish.woff2') format('woff2'); }
+*/
+/* System fallbacks in the meantime */
 :root {
   --font-display: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   --font-body:    Georgia, 'Times New Roman', Times, serif;
@@ -816,7 +824,6 @@ body.night #night-canvas { display:block; }
 }
 #hotkey-list {
   display:flex; flex-direction:column; gap:5px; align-items:flex-end;
-  max-height:280px; overflow-y:auto; overflow-x:hidden;
 }
 .hotkey-btn {
   min-width:54px; max-width:120px; padding:5px 11px;
@@ -2889,6 +2896,7 @@ function playClickSound() {
 // ── HOTKEY SHORTCUT BAR (personal, per-device — players and DM) ───
 // Stored in localStorage, never synced via S — each person's own roll macros.
 let hotkeys = [];
+const HOTKEY_MAX = 12;
 function loadHotkeys() {
   try { hotkeys = JSON.parse(localStorage.getItem('dt-hotkeys')||'[]'); } catch { hotkeys=[]; }
 }
@@ -2899,18 +2907,25 @@ function saveHotkeys() {
 function parseHotkeyFormula(formula) {
   const cleaned = (formula||'').replace(/\s+/g,'').toLowerCase();
   if(!cleaned) return {valid:false};
-  const termRegex = /([+-]?)(\d*d\d+|\d+)/g;
+  const termRegex = /([+-]?)(\d*d\d+(?:k[hl]\d+)?|\d+)/g;
   let match, terms=[], matchedLength=0;
   while((match = termRegex.exec(cleaned)) !== null) {
     matchedLength += match[0].length;
     const sign = match[1]==='-' ? -1 : 1;
     const body = match[2];
     if(body.includes('d')) {
-      const parts = body.split('d');
+      const keepMatch = body.match(/k([hl])(\d+)$/);
+      let diceBody = body, keep = null;
+      if(keepMatch) {
+        keep = { mode: keepMatch[1], count: parseInt(keepMatch[2],10) };
+        diceBody = body.slice(0, body.length - keepMatch[0].length);
+      }
+      const parts = diceBody.split('d');
       const count = parts[0] ? parseInt(parts[0],10) : 1;
       const sides = parseInt(parts[1],10);
       if(!sides || sides<1 || sides>1000 || count<1 || count>100) return {valid:false};
-      terms.push({type:'dice', count, sides, sign});
+      if(keep && (keep.count<1 || keep.count>count)) return {valid:false};
+      terms.push({type:'dice', count, sides, sign, keep});
     } else {
       const v = parseInt(body,10);
       if(isNaN(v)) return {valid:false};
@@ -2920,16 +2935,30 @@ function parseHotkeyFormula(formula) {
   if(matchedLength !== cleaned.length || terms.length===0) return {valid:false};
   return {valid:true, terms};
 }
+function applyKeep(rolls, keep) {
+  if(!keep) return { sum: rolls.reduce((a,b)=>a+b,0), display: rolls.map(String) };
+  const indexed = rolls.map((v,i)=>({v,i}));
+  const sorted = [...indexed].sort((a,b)=> keep.mode==='h' ? b.v-a.v : a.v-b.v);
+  const keptIdx = new Set(sorted.slice(0, keep.count).map(x=>x.i));
+  let sum=0;
+  const display = rolls.map((v,i)=>{
+    if(keptIdx.has(i)) { sum+=v; return String(v); }
+    return '('+v+')'; // dropped die, shown so the full roll stays visible/verifiable
+  });
+  return { sum, display };
+}
 function rollHotkeyFormula(formula) {
   const parsed = parseHotkeyFormula(formula);
   if(!parsed.valid) return null;
   let total=0, breakdown=[];
   parsed.terms.forEach(t=>{
     if(t.type==='dice'){
-      let sum=0, rolls=[];
-      for(let i=0;i<t.count;i++){ const r=1+Math.floor(Math.random()*t.sides); rolls.push(r); sum+=r; }
+      let rolls=[];
+      for(let i=0;i<t.count;i++) rolls.push(1+Math.floor(Math.random()*t.sides));
+      const {sum, display} = applyKeep(rolls, t.keep);
       total += t.sign*sum;
-      breakdown.push(`${t.sign<0?'-':breakdown.length?'+':''}${t.count}d${t.sides}[${rolls.join(',')}]`);
+      const keepTag = t.keep ? `k${t.keep.mode}${t.keep.count}` : '';
+      breakdown.push(`${t.sign<0?'-':breakdown.length?'+':''}${t.count}d${t.sides}${keepTag}[${display.join(',')}]`);
     } else {
       total += t.value;
       breakdown.push(`${t.value>=0&&breakdown.length?'+':''}${t.value}`);
@@ -2963,9 +2992,9 @@ function renderHotkeyBar() {
   });
   const addBtn = el('hotkey-add');
   if(addBtn) {
-    const maxed = hotkeys.length >= 10;
+    const maxed = hotkeys.length >= HOTKEY_MAX;
     addBtn.classList.toggle('maxed', maxed);
-    addBtn.title = maxed ? 'Maximum 10 shortcuts' : 'Add Shortcut';
+    addBtn.title = maxed ? `Maximum ${HOTKEY_MAX} shortcuts` : 'Add Shortcut';
   }
 }
 let hkCtxTarget = null;
@@ -3957,7 +3986,6 @@ function scheduleFlip() {
   // ── HOTKEY BAR (personal, per-device — players and DM) ─────────────
   loadHotkeys();
   renderHotkeyBar();
-  const HOTKEY_MAX = 10;
   el('hotkey-add').addEventListener('click', ()=>{
     if(hotkeys.length >= HOTKEY_MAX) return;
     hotkeys.push({ id: uid(), name:'New', formula:'', color:null });
@@ -4027,7 +4055,7 @@ function scheduleFlip() {
     const formula = el('hotkey-formula-input').value.trim();
     const parsed = parseHotkeyFormula(formula);
     if(!parsed.valid) {
-      el('hotkey-formula-error').textContent = 'Invalid formula — try things like 1d6+2 or 2d8-1';
+      el('hotkey-formula-error').textContent = 'Invalid formula — try 1d6+2, 2d8-1, or 4d6kh3 (keep highest 3)';
       el('hotkey-formula-error').style.display='block';
       return;
     }
