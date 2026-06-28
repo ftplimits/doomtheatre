@@ -7,15 +7,7 @@
 <script src="discord-sdk.js"></script>
 <script src="peerjs.min.js"></script>
 <style>
-/* Fonts self-hosted — Discord CSP blocks external font CDNs.
-   Drop Cinzel.woff2 + IMFellEnglish.woff2 into the repo and
-   uncomment the @font-face blocks below to restore exact styling.
-@font-face { font-family:'Cinzel'; font-weight:400 900;
-  src: url('Cinzel.woff2') format('woff2'); }
-@font-face { font-family:'IM Fell English';
-  src: url('IMFellEnglish.woff2') format('woff2'); }
-*/
-/* System fallbacks in the meantime */
+
 :root {
   --font-display: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   --font-body:    Georgia, 'Times New Roman', Times, serif;
@@ -816,6 +808,65 @@ body.night #night-canvas { display:block; }
 .init-prompt-btns button:hover { color:var(--gold); border-color:var(--gold-dim); }
 #init-prompt-ok { background:rgba(80,40,0,.5); border-color:var(--gold-dim); color:var(--gold); }
 
+/* ── HOTKEY BAR ── */
+#hotkey-bar {
+  position:fixed; top:114px; right:14px; z-index:25;
+  display:flex; flex-direction:column; gap:6px; align-items:flex-end;
+  transition:right .25s;
+}
+#hotkey-list {
+  display:flex; flex-direction:column; gap:5px; align-items:flex-end;
+  max-height:280px; overflow-y:auto; overflow-x:hidden;
+}
+.hotkey-btn {
+  min-width:54px; max-width:120px; padding:5px 11px;
+  border-radius:6px; border:1px solid var(--border);
+  background:rgba(40,30,15,.85); color:var(--gold);
+  font-family:'Cinzel',var(--font-display); font-size:11px; font-weight:700;
+  cursor:pointer; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition:transform .1s, box-shadow .1s; flex-shrink:0;
+}
+.hotkey-btn.unset { color:var(--text-dim); border-style:dashed; font-style:italic; font-weight:400; }
+.hotkey-btn.light-bg { color:#2a2010; }
+.hotkey-btn:hover { transform:scale(1.05); box-shadow:0 0 8px rgba(200,169,110,.4); }
+.hotkey-btn:active { transform:scale(0.96); }
+#hotkey-add {
+  width:30px; height:30px; border-radius:50%; flex-shrink:0;
+  background:rgba(0,0,0,.5); border:1px solid var(--border); color:var(--gold-dim);
+  font-size:17px; line-height:1; cursor:pointer; transition:all .12s;
+}
+#hotkey-add:hover { color:var(--gold); border-color:var(--gold-dim); background:rgba(200,169,110,.12); }
+#hotkey-add.maxed { opacity:.35; cursor:default; }
+#hotkey-add.maxed:hover { color:var(--gold-dim); border-color:var(--border); background:rgba(0,0,0,.5); }
+body.panel-open #hotkey-bar { right:294px; }
+
+#hotkey-ctx-menu {
+  position:fixed; z-index:80; min-width:150px;
+  background:rgba(8,4,2,.96); border:1px solid var(--border);
+  border-radius:5px; padding:4px 0; display:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.7);
+  font-family:'Cinzel',var(--font-display); font-size:11px;
+}
+#hotkey-ctx-menu.open { display:block; }
+
+#hotkey-edit-prompt {
+  position:fixed; inset:0; z-index:10000; display:none;
+  align-items:center; justify-content:center;
+  background:rgba(0,0,0,.65);
+}
+#hotkey-edit-prompt.open { display:flex; }
+.hotkey-field {
+  width:100%; box-sizing:border-box; background:rgba(0,0,0,.45);
+  border:1px solid var(--border); border-radius:4px; color:var(--gold);
+  font-family:'Cinzel',var(--font-display); font-size:13px;
+  text-align:left; padding:7px 9px; outline:none;
+}
+.hotkey-field:focus { border-color:var(--gold-dim); }
+.hotkey-field::placeholder { color:var(--text-dim); font-style:italic; }
+#hotkey-formula-error {
+  font-family:sans-serif; font-size:10px; color:#ff8585; min-height:12px; display:none;
+}
+
 /* ── PEER STATUS ── */
 #peer-status { display:none; } /* hidden — guests still use this internally */
 #peer-list {
@@ -1223,6 +1274,37 @@ body.combat #aoe-layer { display:block; }
     <span id="sfx-icon">🔊</span>
     <span class="vol-label">Effects</span>
     <input type="range" id="sfx-slider" min="0" max="100" value="60" style="--vol:60%">
+  </div>
+</div>
+
+<!-- HOTKEY BAR (personal, per-device — players and DM) -->
+<div id="hotkey-bar">
+  <div id="hotkey-list"></div>
+  <button id="hotkey-add" title="Add Shortcut">+</button>
+</div>
+
+<!-- Hotkey right-click menu -->
+<div id="hotkey-ctx-menu">
+  <div class="ctx-item" id="hk-ctx-edit">✏ Enter New Shortcut</div>
+  <div class="ctx-item" id="hk-ctx-rename">🏷 Rename Shortcut</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-mini">Color</div>
+  <div class="ctx-swatch-row" id="hk-color-row"></div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="hk-ctx-delete" style="color:#ff8585">🗑 Delete Shortcut</div>
+</div>
+
+<!-- Hotkey formula editor -->
+<div id="hotkey-edit-prompt">
+  <div class="init-prompt-box">
+    <div class="init-prompt-title">Shortcut</div>
+    <input id="hotkey-name-input" class="hotkey-field" type="text" maxlength="16" placeholder="Button name (e.g. Fireball)">
+    <input id="hotkey-formula-input" class="hotkey-field" type="text" maxlength="40" placeholder="Roll formula (e.g. 2d6+3)">
+    <div id="hotkey-formula-error"></div>
+    <div class="init-prompt-btns">
+      <button id="hotkey-edit-ok">✓ Save</button>
+      <button id="hotkey-edit-cancel">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -2120,6 +2202,7 @@ function handleMsg(msg,fromConn) {
     case 'move_text':    { const t=S.textItems.find(t=>t.id===msg.id); if(t){ t.x=msg.x; t.y=msg.y; } renderTextLayer(); if(isHost) broadcast(msg,fromConn); break; }
     case 'remove_text':  S.textItems=S.textItems.filter(t=>t.id!==msg.id); renderTextLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.mod||0,msg.name); if(isHost) broadcast(msg,fromConn); break;
+    case 'hotkey_roll': addHotkeyLogEntry(msg.label,msg.breakdown,msg.total,msg.name); if(isHost) broadcast(msg,fromConn); break;
   }
 }
 
@@ -2745,26 +2828,49 @@ function isDarkDiceColor(hex) {
   return (r*299+g*587+b*114)/1000 < 20; // only truly black fills get the white pill
 }
 
-function addLogEntry(sides,rolls,total,mode,mod,name) {
-  const color = currentDiceFill;
-  const dark  = isDarkDiceColor(color);
-  diceLog.unshift({sides,rolls,total,mode,mod,name,color,dark}); if(diceLog.length>LOG_MAX) diceLog.pop();
+function renderDiceLogList() {
   const log=el('dice-log'); log.innerHTML='';
   diceLog.forEach((e,i)=>{
     const d=document.createElement('div');
     d.className='log-entry'+(i?' old':'')+(e.dark?' dark-palette':'');
     d.style.color = e.color||'var(--gold)';
     if(i>0) d.style.opacity='0.55';
-    const tag=e.mode==='adv'?'ADV':e.mode==='dis'?'DIS':`${e.rolls.length}d${e.sides}`;
-    const modTag=e.mod?(e.mod>0?'+'+e.mod:''+e.mod):'';
-    const rawRoll=e.total-e.mod;
-    const isNat20=e.sides===20&&rawRoll===20, isNat1=e.sides===20&&rawRoll===1;
-    const prefix=isNat20?'⭐ ':isNat1?'💀 ':'';
-    const suffix=isNat20?' ⭐':isNat1?' 💀':'';
-    d.textContent=`${prefix}${e.name}: ${tag}${modTag} → ${e.total}${suffix}`;
+    if(e.isHotkey) {
+      d.textContent = `${e.name}: ${e.label} (${e.breakdown}) → ${e.total}`;
+    } else {
+      const tag=e.mode==='adv'?'ADV':e.mode==='dis'?'DIS':`${e.rolls.length}d${e.sides}`;
+      const modTag=e.mod?(e.mod>0?'+'+e.mod:''+e.mod):'';
+      const rawRoll=e.total-e.mod;
+      const isNat20=e.sides===20&&rawRoll===20, isNat1=e.sides===20&&rawRoll===1;
+      const prefix=isNat20?'⭐ ':isNat1?'💀 ':'';
+      const suffix=isNat20?' ⭐':isNat1?' 💀':'';
+      d.textContent=`${prefix}${e.name}: ${tag}${modTag} → ${e.total}${suffix}`;
+    }
     log.appendChild(d);
   });
+}
+function addLogEntry(sides,rolls,total,mode,mod,name) {
+  const color = currentDiceFill;
+  const dark  = isDarkDiceColor(color);
+  diceLog.unshift({sides,rolls,total,mode,mod,name,color,dark}); if(diceLog.length>LOG_MAX) diceLog.pop();
+  renderDiceLogList();
   showDicePopup(sides,rolls,total,mode,mod,name);
+}
+function addHotkeyLogEntry(label, breakdown, total, name) {
+  const color = currentDiceFill;
+  const dark  = isDarkDiceColor(color);
+  diceLog.unshift({isHotkey:true, label, breakdown, total, name, color, dark}); if(diceLog.length>LOG_MAX) diceLog.pop();
+  renderDiceLogList();
+  showHotkeyPopup(label, breakdown, total, name);
+}
+function showHotkeyPopup(label, breakdown, total, name) {
+  const p=el('dice-popup');
+  p.querySelector('.pop-die').textContent = label;
+  p.querySelector('.pop-result').textContent = total;
+  p.querySelector('.pop-name').textContent = breakdown + ' · ' + name;
+  p.classList.add('visible');
+  clearTimeout(popTimer);
+  popTimer=setTimeout(()=>p.classList.remove('visible'),2000);
 }
 
 // ── AUDIO ─────────────────────────────────────────────────────────
@@ -2779,6 +2885,99 @@ function playSound(name, vol=1) {
 function playClickSound() {
   playSound('click' + (Math.floor(Math.random()*3)+1), 0.6);
 }
+
+// ── HOTKEY SHORTCUT BAR (personal, per-device — players and DM) ───
+// Stored in localStorage, never synced via S — each person's own roll macros.
+let hotkeys = [];
+function loadHotkeys() {
+  try { hotkeys = JSON.parse(localStorage.getItem('dt-hotkeys')||'[]'); } catch { hotkeys=[]; }
+}
+function saveHotkeys() {
+  try { localStorage.setItem('dt-hotkeys', JSON.stringify(hotkeys)); } catch {}
+}
+
+function parseHotkeyFormula(formula) {
+  const cleaned = (formula||'').replace(/\s+/g,'').toLowerCase();
+  if(!cleaned) return {valid:false};
+  const termRegex = /([+-]?)(\d*d\d+|\d+)/g;
+  let match, terms=[], matchedLength=0;
+  while((match = termRegex.exec(cleaned)) !== null) {
+    matchedLength += match[0].length;
+    const sign = match[1]==='-' ? -1 : 1;
+    const body = match[2];
+    if(body.includes('d')) {
+      const parts = body.split('d');
+      const count = parts[0] ? parseInt(parts[0],10) : 1;
+      const sides = parseInt(parts[1],10);
+      if(!sides || sides<1 || sides>1000 || count<1 || count>100) return {valid:false};
+      terms.push({type:'dice', count, sides, sign});
+    } else {
+      const v = parseInt(body,10);
+      if(isNaN(v)) return {valid:false};
+      terms.push({type:'mod', value:v*sign});
+    }
+  }
+  if(matchedLength !== cleaned.length || terms.length===0) return {valid:false};
+  return {valid:true, terms};
+}
+function rollHotkeyFormula(formula) {
+  const parsed = parseHotkeyFormula(formula);
+  if(!parsed.valid) return null;
+  let total=0, breakdown=[];
+  parsed.terms.forEach(t=>{
+    if(t.type==='dice'){
+      let sum=0, rolls=[];
+      for(let i=0;i<t.count;i++){ const r=1+Math.floor(Math.random()*t.sides); rolls.push(r); sum+=r; }
+      total += t.sign*sum;
+      breakdown.push(`${t.sign<0?'-':breakdown.length?'+':''}${t.count}d${t.sides}[${rolls.join(',')}]`);
+    } else {
+      total += t.value;
+      breakdown.push(`${t.value>=0&&breakdown.length?'+':''}${t.value}`);
+    }
+  });
+  return {total, breakdown: breakdown.join(' ')};
+}
+function fireHotkey(hk) {
+  if(!hk.formula) return; // unconfigured — right-click to set up
+  const result = rollHotkeyFormula(hk.formula);
+  if(!result) return;
+  const myName = isHost
+    ? (S.dmName||'DM')
+    : (S.players.find(p=>p.discordUserId===discordUser?.id)?.name || discordUser?.username || 'Player');
+  send({type:'hotkey_roll', label:hk.name, breakdown:result.breakdown, total:result.total, name:myName});
+  playClickSound();
+}
+function renderHotkeyBar() {
+  const list = el('hotkey-list'); if(!list) return;
+  list.innerHTML = '';
+  hotkeys.forEach(hk=>{
+    const btn = document.createElement('button');
+    btn.className = 'hotkey-btn' + (hk.formula ? '' : ' unset') + (hk.lightBg ? ' light-bg' : '');
+    btn.textContent = hk.name || '?';
+    if(hk.color) btn.style.background = hk.color;
+    btn.dataset.hkId = hk.id;
+    btn.title = hk.formula || 'Right-click to set up';
+    btn.addEventListener('click', ()=>fireHotkey(hk));
+    btn.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); showHotkeyCtxMenu(e, hk.id); });
+    list.appendChild(btn);
+  });
+  const addBtn = el('hotkey-add');
+  if(addBtn) {
+    const maxed = hotkeys.length >= 10;
+    addBtn.classList.toggle('maxed', maxed);
+    addBtn.title = maxed ? 'Maximum 10 shortcuts' : 'Add Shortcut';
+  }
+}
+let hkCtxTarget = null;
+function showHotkeyCtxMenu(e, id) {
+  hkCtxTarget = id;
+  const menu = el('hotkey-ctx-menu');
+  menu.classList.add('open');
+  const mh=menu.offsetHeight, mw=menu.offsetWidth;
+  menu.style.left = Math.min(e.clientX, window.innerWidth-mw-6)+'px';
+  menu.style.top  = (e.clientY+mh>window.innerHeight-6 ? e.clientY-mh : e.clientY)+'px';
+}
+
 // Preload intro chord immediately so it's cached and ready
 const _introAudio = new Audio('sounds/intro-chord.m4a');
 _introAudio.preload = 'auto'; _introAudio.volume = 0.5; _introAudio.load();
@@ -3755,6 +3954,91 @@ function scheduleFlip() {
     applySfxVolume();
   });
 
+  // ── HOTKEY BAR (personal, per-device — players and DM) ─────────────
+  loadHotkeys();
+  renderHotkeyBar();
+  const HOTKEY_MAX = 10;
+  el('hotkey-add').addEventListener('click', ()=>{
+    if(hotkeys.length >= HOTKEY_MAX) return;
+    hotkeys.push({ id: uid(), name:'New', formula:'', color:null });
+    saveHotkeys();
+    renderHotkeyBar();
+  });
+  document.addEventListener('pointerdown', e=>{
+    if(!e.target?.closest?.('#hotkey-ctx-menu')) el('hotkey-ctx-menu')?.classList.remove('open');
+  }, true);
+  el('hk-ctx-edit').addEventListener('click', ()=>{
+    el('hotkey-ctx-menu').classList.remove('open');
+    if(!hkCtxTarget) return;
+    const hk = hotkeys.find(h=>h.id===hkCtxTarget); if(!hk) return;
+    el('hotkey-name-input').value = hk.name||'';
+    el('hotkey-formula-input').value = hk.formula||'';
+    el('hotkey-formula-error').style.display='none';
+    el('hotkey-edit-prompt').dataset.pendingId = hk.id;
+    el('hotkey-edit-prompt').classList.add('open');
+    setTimeout(()=>el('hotkey-name-input').focus(), 50);
+  });
+  el('hk-ctx-rename').addEventListener('click', ()=>{
+    el('hotkey-ctx-menu').classList.remove('open');
+    if(!hkCtxTarget) return;
+    const hk = hotkeys.find(h=>h.id===hkCtxTarget); if(!hk) return;
+    el('rename-prompt-name').textContent = hk.name||'Shortcut';
+    el('rename-prompt-input').value = hk.name||'';
+    el('rename-prompt').dataset.pendingType = 'hotkey';
+    el('rename-prompt').dataset.pendingId = hk.id;
+    el('rename-prompt').classList.add('open');
+    setTimeout(()=>{ el('rename-prompt-input').select(); el('rename-prompt-input').focus(); }, 50);
+  });
+  el('hk-ctx-delete').addEventListener('click', ()=>{
+    el('hotkey-ctx-menu').classList.remove('open');
+    if(!hkCtxTarget) return;
+    hotkeys = hotkeys.filter(h=>h.id!==hkCtxTarget);
+    saveHotkeys();
+    renderHotkeyBar();
+  });
+  const HOTKEY_COLORS = [
+    {label:'Default',   value:null,      bg:'rgba(40,30,15,.85)', outline:'1px solid #888'},
+    {label:'Red',       value:'#7a2424', bg:'#7a2424'},
+    {label:'Green',     value:'#236b35', bg:'#236b35'},
+    {label:'Blue',      value:'#22518f', bg:'#22518f'},
+    {label:'Purple',    value:'#5a2c8f', bg:'#5a2c8f'},
+    {label:'Gold',      value:'#8a661c', bg:'#8a661c'},
+    {label:'Off-White', value:'#e8e0d0', bg:'#e8e0d0', light:true},
+  ];
+  const hkColorRow = el('hk-color-row');
+  HOTKEY_COLORS.forEach(c=>{
+    const s=document.createElement('div'); s.className='ctx-swatch';
+    s.style.background=c.bg; s.title=c.label;
+    if(c.outline) s.style.outline=c.outline;
+    hkColorRow.appendChild(s);
+    s.addEventListener('click', ()=>{
+      if(!hkCtxTarget) return;
+      const hk=hotkeys.find(h=>h.id===hkCtxTarget); if(!hk) return;
+      hk.color = c.value;
+      hk.lightBg = !!c.light;
+      saveHotkeys(); renderHotkeyBar();
+      el('hotkey-ctx-menu').classList.remove('open');
+    });
+  });
+  el('hotkey-edit-ok').addEventListener('click', ()=>{
+    const id = el('hotkey-edit-prompt').dataset.pendingId;
+    const hk = hotkeys.find(h=>h.id===id); if(!hk) return;
+    const name = el('hotkey-name-input').value.trim().slice(0,16) || 'Roll';
+    const formula = el('hotkey-formula-input').value.trim();
+    const parsed = parseHotkeyFormula(formula);
+    if(!parsed.valid) {
+      el('hotkey-formula-error').textContent = 'Invalid formula — try things like 1d6+2 or 2d8-1';
+      el('hotkey-formula-error').style.display='block';
+      return;
+    }
+    hk.name = name; hk.formula = formula;
+    saveHotkeys(); renderHotkeyBar();
+    el('hotkey-edit-prompt').classList.remove('open');
+  });
+  el('hotkey-edit-cancel').addEventListener('click', ()=>{
+    el('hotkey-edit-prompt').classList.remove('open');
+  });
+
   // ── MUSIC ─────────────────────────────────────────────────────────
   const musicPanel = el('music-panel');
   buildMusicPanel();
@@ -3832,6 +4116,9 @@ function scheduleFlip() {
         // Intentionally NOT broadcast — pre-placement config stays host-local until the
         // item is actually placed via add_player/add_npc, which carries name+size then.
       }
+    } else if(type==='hotkey') {
+      const hk = hotkeys.find(h=>h.id===id);
+      if(hk) { hk.name = name.slice(0,16); saveHotkeys(); renderHotkeyBar(); }
     } else if(id) {
       send({type:'rename_avatar', id, entityType:type, name});
     }
