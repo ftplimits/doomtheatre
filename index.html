@@ -201,11 +201,47 @@ body.combat #combat-arena { display:block; }
 
 /* ── TOOLBAR — top right ── */
 #toolbar {
-  position:fixed; right:14px; top:14px;
+  position:fixed; right:54px; top:14px;
   z-index:25; display:none; flex-direction:row; gap:8px;
   transition:right .25s;
 }
-body.panel-open #toolbar { right:294px; }
+body.panel-open #toolbar { right:334px; }
+
+/* ── HELP TIPS ── */
+#help-wrap { position:fixed; top:14px; right:14px; z-index:26; transition:right .25s; }
+body.panel-open #help-wrap { right:294px; }
+#help-btn {
+  width:30px; height:30px; border-radius:50%;
+  background:rgba(0,0,0,.55); border:1px solid var(--border); color:var(--gold-dim);
+  font-family:'Cinzel',var(--font-display); font-size:15px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+  cursor:help; transition:all .15s; user-select:none;
+}
+#help-btn:hover { color:var(--gold); border-color:var(--gold-dim); background:rgba(200,169,110,.15); }
+#help-tooltip {
+  position:absolute; top:38px; right:0; width:280px;
+  background:rgba(8,4,2,.97); border:1px solid var(--border);
+  border-radius:8px; padding:12px 14px;
+  box-shadow:0 6px 24px rgba(0,0,0,.8);
+  opacity:0; visibility:hidden; transform:translateY(-4px);
+  transition:opacity .15s, transform .15s, visibility .15s;
+  pointer-events:none;
+}
+#help-wrap:hover #help-tooltip { opacity:1; visibility:visible; transform:translateY(0); }
+.help-title {
+  font-family:'Cinzel',var(--font-display); font-size:12px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--gold); margin-bottom:8px;
+  border-bottom:1px solid var(--border); padding-bottom:6px;
+}
+.help-row {
+  font-family:sans-serif; font-size:11px; color:var(--text-dim);
+  line-height:1.4; margin-bottom:7px;
+}
+.help-row:last-child { margin-bottom:0; }
+.help-key {
+  display:block; font-family:'Cinzel',var(--font-display); font-size:11px;
+  color:var(--gold-dim); margin-bottom:1px; letter-spacing:.02em;
+}
 
 /* ── VOLUME BAR ── */
 #volume-bar {
@@ -1120,6 +1156,21 @@ body.combat #aoe-layer { display:block; }
 
 <!-- JOIN REQUESTS (host only) -->
 <div id="join-requests"></div>
+
+<!-- HELP TIPS (always visible, host and players) -->
+<div id="help-wrap">
+  <div id="help-btn">?</div>
+  <div id="help-tooltip">
+    <div class="help-title">Quick Tips</div>
+    <div class="help-row"><span class="help-key">🖱️ Middle-click</span>Ping a spot on the map</div>
+    <div class="help-row"><span class="help-key">🔄 Double-click</span>Flip an avatar to face the other way</div>
+    <div class="help-row"><span class="help-key">📐 AoE Shapes</span>Pick a shape, drag to place, right-click to remove</div>
+    <div class="help-row"><span class="help-key">🔊 Music &amp; Effects</span>Two independent sliders, top-right</div>
+    <div class="help-row"><span class="help-key">🎲 Dice Tray</span>Click to roll · scroll to set modifier · right-click for count/advantage</div>
+    <div class="help-row"><span class="help-key">⭐ Dice Presets</span>Click + to add · right-click a preset to set its formula, name, or color</div>
+    <div class="help-row"><span class="help-key">📜 Roll Log &amp; Handouts</span>Recent rolls bottom-right · revealed handouts bottom-left</div>
+  </div>
+</div>
 
 <!-- LOADING OVERLAY -->
 <div id="loading-overlay">
