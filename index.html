@@ -1117,6 +1117,8 @@ body.combat #aoe-layer { display:block; }
   <div class="ctx-sep" id="ctx-alt-sep"></div>
   <div class="ctx-item" id="ctx-alt-img">🖼 Alternate Image</div>
   <div class="ctx-item" id="ctx-clear-alt" style="font-size:9px;color:var(--text-dim)">✕ Clear Alternate</div>
+  <div class="ctx-item" id="ctx-temp-img">🌀 Temporary Image</div>
+  <div class="ctx-item" id="ctx-clear-temp" style="font-size:9px;color:var(--text-dim)">✕ Clear Temporary</div>
   <div class="ctx-sep" id="ctx-size-sep"></div>
   <div class="ctx-mini" id="ctx-size-label">Size</div>
   <div class="ctx-size-row" id="ctx-size-row">
@@ -1134,6 +1136,7 @@ body.combat #aoe-layer { display:block; }
 
 <!-- Hidden file inputs -->
 <input type="file" id="upload-alt-avatar" accept="image/*" style="display:none">
+<input type="file" id="upload-temp-image" accept="image/*" style="display:none">
 <input type="file" id="upload-dm-avatar" accept="image/*" style="display:none">
 <input type="file" id="upload-backdrops" accept="image/*" multiple style="display:none">
 <input type="file" id="upload-players"   accept="image/*" multiple style="display:none">
@@ -1528,6 +1531,7 @@ const TOKEN_ENDPOINT = '/.proxy/api/token'; // via Discord proxy — Portal mapp
 let discordSdk  = null;
 let discordUser = null;
 const discordPeers = new Map(); // peerId → { discordUserId, username, avatarHash }
+const flipCooldown = new Map(); // avatarId → timestamp of last accepted flip, global rate limit
 
 function detectDiscord() {
   const p = new URLSearchParams(window.location.search);
@@ -1591,7 +1595,9 @@ function setSpeaking(userId, active) {
     const avId=frame.dataset.avId;
     if(avId) {
       const obj=S.players.find(p=>p.id===avId);
-      if(obj?.altAvatar||!active) {
+      if(obj?.tempImage) {
+        // Temp image override active (polymorph/shapeshift) — never swap to alt avatar
+      } else if(obj?.altAvatar||!active) {
         const img=frame.querySelector('img');
         if(img) img.src=(active&&obj?.altAvatar)?obj.altAvatar:(obj?.avatar||'');
       }
@@ -1881,6 +1887,14 @@ function handleMsg(msg,fromConn) {
       if(isHost) broadcast(msg,fromConn); break;
     }
     case 'flip_avatar': {
+      // Global per-avatar cooldown — every client runs this same check on every flip
+      // event regardless of who triggered it, so rapid spam-clicking (from one person
+      // or several people piling on the same avatar) gets rate-limited network-wide
+      // rather than flooding everyone's screen with a cascade of flips.
+      const nowFlip = performance.now();
+      const lastFlip = flipCooldown.get(msg.id) || 0;
+      if(nowFlip - lastFlip < 400) break; // too soon — drop silently, no state change, no relay
+      flipCooldown.set(msg.id, nowFlip);
       if(msg.id==='__dm__') {
         S.dmFlipped=msg.flipped;
         el('dm-av-frame').classList.toggle('flipped', S.dmFlipped);
@@ -1949,11 +1963,18 @@ function handleMsg(msg,fromConn) {
         if('borderColor'  in msg) obj.borderColor=msg.borderColor;
         if('icons'        in msg) obj.icons=msg.icons;
         if('altAvatar'    in msg) obj.altAvatar=msg.altAvatar;
+        if('tempImage'    in msg) obj.tempImage=msg.tempImage;
         if('discordUserId' in msg) obj.discordUserId=msg.discordUserId;
         if('size'         in msg) obj.size=msg.size;
       }
       document.querySelectorAll(`[data-av-id="${msg.id}"]`).forEach(frame=>{
         if('borderColor'  in msg) frame.style.borderColor=msg.borderColor||'';
+        if('tempImage' in msg){
+          // Temp image always wins while active; clearing it falls back to the base avatar —
+          // any alt-avatar speaking-swap naturally resumes on the next speaking event.
+          const img=frame.querySelector('img');
+          if(img && obj) img.src = msg.tempImage || obj.avatar || '';
+        }
         if('discordUserId' in msg){
           frame.dataset.discordId=msg.discordUserId||'';
           const wrap=frame.closest('.av-wrap,.ca-wrap');
@@ -2293,12 +2314,12 @@ function makeAvatarEl(obj,removeType) {
   const frame=document.createElement('div'); frame.className='av-frame';
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
-  frame.innerHTML=(obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}" draggable="false">`:`<div class="av-placeholder">👤</div>`)
+  frame.innerHTML=((obj.tempImage||obj.avatar)?`<img src="${obj.tempImage||obj.avatar}" alt="${obj.name}" draggable="false">`:`<div class="av-placeholder">👤</div>`)
     +downedOverlayMarkup(entityType, obj);
   wireDeathSaveDots(frame, entityType, obj);
-  _applyAvatarStyle(frame, obj);
   const lbl=document.createElement('div'); lbl.className='av-label'; lbl.textContent=obj.name||'';
   wrap.appendChild(frame); wrap.appendChild(lbl);
+  _applyAvatarStyle(frame, obj);
   if(isHost) {
     wrap.draggable=true;
     wrap.addEventListener('mousedown',e=>{
@@ -2403,12 +2424,11 @@ function makeCombatAv(obj, entityType, idx) {
   const frame=document.createElement('div'); frame.className='ca-frame';
   frame.dataset.avId=obj.id;
   if(obj.flipped) frame.classList.add('flipped');
-  frame.innerHTML=(obj.avatar?`<img src="${obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`)
+  frame.innerHTML=((obj.tempImage||obj.avatar)?`<img src="${obj.tempImage||obj.avatar}" alt="${obj.name}">`:`<div class="av-placeholder">👤</div>`)
     +downedOverlayMarkup(entityType, obj);
   wireDeathSaveDots(frame, entityType, obj);
-
-  _applyAvatarStyle(frame, obj);
   wrap.appendChild(frame);
+  _applyAvatarStyle(frame, obj);
 
   // HP/AC badges are appended to WRAP, not FRAME — frame gets scaleX(-1) when flipped,
   // which would mirror both badge position AND the number text. Living on the wrap
@@ -3682,6 +3702,23 @@ function scheduleFlip() {
     el('ctx-menu').classList.remove('open');
   });
 
+  // ── TEMPORARY IMAGE (polymorph/shapeshift override) ───────────────
+  const uploadTempInput = el('upload-temp-image');
+  el('ctx-temp-img').addEventListener('click', ()=>{
+    uploadTempInput.click();
+    el('ctx-menu').classList.remove('open');
+  });
+  uploadTempInput.addEventListener('change', async e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const url=await toWebP(file);
+    if(ctxTarget) send({type:'set_avatar_style', id:ctxTarget.id, entityType:ctxTarget.entityType, tempImage:url});
+    uploadTempInput.value='';
+  });
+  el('ctx-clear-temp').addEventListener('click', ()=>{
+    if(ctxTarget) send({type:'set_avatar_style', id:ctxTarget.id, entityType:ctxTarget.entityType, tempImage:null});
+    el('ctx-menu').classList.remove('open');
+  });
+
   // ── DICE TOGGLE ───────────────────────────────────────────────────
   let diceVisible=true;
   el('dice-toggle').addEventListener('click', ()=>{
@@ -4340,6 +4377,8 @@ function scheduleFlip() {
     el('ctx-alt-sep').style.display   = (isPlayer||isDm) ? 'block' : 'none';
     el('ctx-alt-img').style.display   = (isPlayer||isDm) ? 'block' : 'none';
     el('ctx-clear-alt').style.display = (isPlayer||isDm) ? 'block' : 'none';
+    el('ctx-temp-img').style.display   = isAvatar ? 'block' : 'none';
+    el('ctx-clear-temp').style.display = isAvatar ? 'block' : 'none';
 
     // Size section — players and NPCs, not DM
     el('ctx-size-sep').style.display   = isAvatar ? 'block' : 'none';
@@ -4405,6 +4444,8 @@ function scheduleFlip() {
     el('ctx-downed').style.display='none';
     el('ctx-hp-track').style.display='none';
     el('ctx-ac-track').style.display='none';
+    el('ctx-temp-img').style.display='none';
+    el('ctx-clear-temp').style.display='none';
     el('ctx-torch').textContent = '🔥 Torch: ' + (S.dmTorch?'On':'Off');
     el('ctx-torch').classList.toggle('torch-on', S.dmTorch);
     el('ctx-style-sep').style.display='none';
