@@ -823,20 +823,30 @@ body.night #night-canvas { display:block; }
   transition:right .25s;
 }
 #hotkey-list {
-  display:flex; flex-direction:column; gap:5px; align-items:flex-end;
+  display:flex; flex-direction:column; gap:10px; align-items:flex-end;
 }
-.hotkey-btn {
-  min-width:54px; max-width:120px; padding:5px 11px;
-  border-radius:6px; border:1px solid var(--border);
-  background:rgba(40,30,15,.85); color:var(--gold);
-  font-family:'Cinzel',var(--font-display); font-size:11px; font-weight:700;
-  cursor:pointer; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  transition:transform .1s, box-shadow .1s; flex-shrink:0;
+.hotkey-die-btn {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  cursor:pointer; flex-shrink:0;
 }
-.hotkey-btn.unset { color:var(--text-dim); border-style:dashed; font-style:italic; font-weight:400; }
-.hotkey-btn.light-bg { color:#2a2010; }
-.hotkey-btn:hover { transform:scale(1.05); box-shadow:0 0 8px rgba(200,169,110,.4); }
-.hotkey-btn:active { transform:scale(0.96); }
+.hotkey-die-clickable {
+  background:none; border:none; cursor:pointer; padding:1px;
+  display:flex; align-items:center; justify-content:center;
+  transition:transform .15s, filter .15s;
+}
+.hotkey-die-clickable:hover  { transform:scale(1.14); filter:drop-shadow(0 0 5px rgba(200,169,110,.5)); }
+.hotkey-die-clickable:active { transform:scale(.92); }
+.hotkey-die-clickable svg { width:42px; height:42px; display:block; transform-origin:50% 50%; }
+.hotkey-die-clickable.rolling svg { animation:die-spin .45s cubic-bezier(.3,.8,.4,1); }
+.hk-die-poly      { fill:var(--hk-fill); stroke:var(--hk-stroke); stroke-width:2.5; }
+.hk-die-poly-rect { fill:var(--hk-fill); stroke:var(--hk-stroke); stroke-width:2.5; }
+.hk-die-inner-line{ stroke:var(--hk-fill); stroke-width:1.2; fill:none; opacity:.35; }
+.hotkey-die-clickable.unset .hk-die-poly { fill:none; stroke:var(--hk-fill); stroke-dasharray:4 3; opacity:.6; }
+.hotkey-die-caption {
+  font-family:'Cinzel',var(--font-display); font-size:10px; font-weight:700;
+  text-align:center; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis;
+  text-shadow:0 1px 3px rgba(0,0,0,.9), 0 0 5px rgba(0,0,0,.7);
+}
 #hotkey-add {
   width:30px; height:30px; border-radius:50%; flex-shrink:0;
   background:rgba(0,0,0,.5); border:1px solid var(--border); color:var(--gold-dim);
@@ -1694,6 +1704,12 @@ function setSpeaking(userId, active) {
   });
 }
 
+function withTimeout(promise, ms, fallback=null) {
+  return Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 async function initDiscordSDK() {
   try {
     // SDK loads as EmbeddedAppSDK global via the CDN IIFE build
@@ -1707,7 +1723,8 @@ async function initDiscordSDK() {
     // ── Step 1: Authorize → get OAuth code ───────────────────────
     // Try silently first (prompt:'none') — works instantly for anyone who has already
     // authorized this app. If they haven't (e.g. first-time user), 'none' has no consent
-    // screen to fall back on and fails silently — so retry once with an explicit prompt.
+    // screen to fall back on — it may throw, OR it may just resolve with an empty code
+    // without throwing at all, so we check both cases before retrying with an explicit prompt.
     let code;
     try {
       ({ code } = await discordSdk.commands.authorize({
@@ -1718,7 +1735,10 @@ async function initDiscordSDK() {
         scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
       }));
     } catch(silentErr) {
-      console.warn('[Discord] Silent authorize failed, retrying with explicit consent prompt:', silentErr);
+      console.warn('[Discord] Silent authorize threw, will retry with explicit consent prompt:', silentErr);
+    }
+    if(!code) {
+      console.warn('[Discord] Silent authorize produced no code, retrying with explicit consent prompt');
       ({ code } = await discordSdk.commands.authorize({
         client_id: CLIENT_ID,
         response_type: 'code',
@@ -1784,8 +1804,10 @@ async function startDiscordSession(instanceId) {
     console.log('[DooM Theatre] HOST claimed:', id);
     el('toolbar').style.display='flex'; // host sees toolbar
 
-    // Tag DM frame with Discord ID so speaking highlights it — store in S so guests sync it
-    const user = await sdkPromise;
+    // Tag DM frame with Discord ID so speaking highlights it — store in S so guests sync it.
+    // Timeout-raced: identity is a nice-to-have and must never block the actual room setup
+    // below (renderAll/hideLoadingOverlay) if Discord's auth flow hangs for any reason.
+    const user = await withTimeout(sdkPromise, 15000, null);
     if(user){ el('dm-avatar-wrap').dataset.discordId = user.id; S.dmDiscordId = user.id; }
 
     myPeer.on('connection', conn => handleIncomingConnection(conn));
@@ -1800,7 +1822,10 @@ async function startDiscordSession(instanceId) {
       console.log('[DooM Theatre] GUEST — connecting to host at:', roomCode);
       myPeer.destroy();
 
-      const user = await sdkPromise;
+      // Timeout-raced: identity must never block the real connection below — if Discord's
+      // auth flow hangs (e.g. a consent prompt that fails to render on some client), the
+      // guest should still join the actual session, just without a name attached yet.
+      const user = await withTimeout(sdkPromise, 15000, null);
 
       myPeer = new Peer(cfg);
       myPeer.on('open', guestId => {
@@ -2843,7 +2868,9 @@ function renderDiceLogList() {
     d.style.color = e.color||'var(--gold)';
     if(i>0) d.style.opacity='0.55';
     if(e.isHotkey) {
-      d.textContent = `${e.name}: ${e.label} (${e.breakdown}) → ${e.total}`;
+      const hkPrefix=e.hadNat20?'⭐ ':e.hadNat1?'💀 ':'';
+      const hkSuffix=e.hadNat20?' ⭐':e.hadNat1?' 💀':'';
+      d.textContent = `${hkPrefix}${e.name}: ${e.label} (${e.breakdown}) → ${e.total}${hkSuffix}`;
     } else {
       const tag=e.mode==='adv'?'ADV':e.mode==='dis'?'DIS':`${e.rolls.length}d${e.sides}`;
       const modTag=e.mod?(e.mod>0?'+'+e.mod:''+e.mod):'';
@@ -2863,16 +2890,17 @@ function addLogEntry(sides,rolls,total,mode,mod,name) {
   renderDiceLogList();
   showDicePopup(sides,rolls,total,mode,mod,name);
 }
-function addHotkeyLogEntry(label, breakdown, total, name) {
+function addHotkeyLogEntry(label, breakdown, total, name, hadNat20, hadNat1) {
   const color = currentDiceFill;
   const dark  = isDarkDiceColor(color);
-  diceLog.unshift({isHotkey:true, label, breakdown, total, name, color, dark}); if(diceLog.length>LOG_MAX) diceLog.pop();
+  diceLog.unshift({isHotkey:true, label, breakdown, total, name, color, dark, hadNat20, hadNat1}); if(diceLog.length>LOG_MAX) diceLog.pop();
   renderDiceLogList();
-  showHotkeyPopup(label, breakdown, total, name);
+  showHotkeyPopup(label, breakdown, total, name, hadNat20, hadNat1);
 }
-function showHotkeyPopup(label, breakdown, total, name) {
+function showHotkeyPopup(label, breakdown, total, name, hadNat20, hadNat1) {
   const p=el('dice-popup');
-  p.querySelector('.pop-die').textContent = label;
+  const prefix=hadNat20?'⭐ ':hadNat1?'💀 ':'';
+  p.querySelector('.pop-die').textContent = prefix+label;
   p.querySelector('.pop-result').textContent = total;
   p.querySelector('.pop-name').textContent = breakdown + ' · ' + name;
   p.classList.add('visible');
@@ -2902,6 +2930,44 @@ function loadHotkeys() {
 }
 function saveHotkeys() {
   try { localStorage.setItem('dt-hotkeys', JSON.stringify(hotkeys)); } catch {}
+}
+// Same fill/stroke pairs as the dice tray palette (kept as a separate constant since
+// the tray's own list lives inside init()'s closure and isn't reachable from here).
+const HOTKEY_DIE_PALETTES = [
+  { label:'Bone',   fill:'#f5f0e0', stroke:'#2a1a0a' },
+  { label:'Blood',  fill:'#8b0000', stroke:'#f5e0e0' },
+  { label:'Gold',   fill:'#c8a96e', stroke:'#2a1a0a' },
+  { label:'Arcane', fill:'#2a1060', stroke:'#c0a0ff' },
+  { label:'Iron',   fill:'#4a4a55', stroke:'#d0d0e0' },
+  { label:'Jade',   fill:'#1a4a2e', stroke:'#90ffb8' },
+  { label:'Orange', fill:'#c85a0a', stroke:'#fff0e0' },
+  { label:'Blue',   fill:'#1a3a7e', stroke:'#a0c4ff' },
+  { label:'Black',  fill:'#111114', stroke:'#c8c8d0' },
+];
+const HOTKEY_DEFAULT_PALETTE = HOTKEY_DIE_PALETTES[0]; // Bone — off-white default
+// Same SVG shapes as the dice tray buttons, reused at hotkey-button scale (classes prefixed hk- so
+// each instance can carry its own fill/stroke via inline CSS vars, independent of the tray's active palette).
+const HOTKEY_DIE_SHAPES = {
+  4:   `<polygon points="30,5 56,52 4,52" class="hk-die-poly"/><line x1="30" y1="5" x2="30" y2="52" class="hk-die-inner-line"/>`,
+  6:   `<rect x="7" y="7" width="46" height="46" rx="6" class="hk-die-poly-rect"/>`,
+  8:   `<polygon points="30,4 56,30 30,56 4,30" class="hk-die-poly"/><line x1="4" y1="30" x2="56" y2="30" class="hk-die-inner-line"/><line x1="30" y1="4" x2="30" y2="56" class="hk-die-inner-line"/>`,
+  10:  `<polygon points="30,4 52,20 46,52 14,52 8,20" class="hk-die-poly"/>`,
+  12:  `<polygon points="30,4 50,14 57,36 42,54 18,54 3,36 10,14" class="hk-die-poly"/>`,
+  20:  `<polygon points="30,4 54,17 54,43 30,56 6,43 6,17" class="hk-die-poly"/><line x1="6" y1="17" x2="54" y2="17" class="hk-die-inner-line"/><line x1="6" y1="43" x2="54" y2="43" class="hk-die-inner-line"/>`,
+  100: `<polygon points="52,21 39,8 21,8 8,21 8,39 21,52 39,52 52,39" class="hk-die-poly"/>`,
+};
+function getLargestDieSides(formula) {
+  const parsed = parseHotkeyFormula(formula);
+  if(!parsed || !parsed.valid) return null;
+  let maxSides = 0;
+  parsed.terms.forEach(t=>{ if(t.type==='dice' && t.sides>maxSides) maxSides=t.sides; });
+  return maxSides || null;
+}
+function nearestDieShape(sides) {
+  // Formula dice can be any size (e.g. d3, d1000) — snap to the closest shape we have art for.
+  if(HOTKEY_DIE_SHAPES[sides]) return sides;
+  const known = Object.keys(HOTKEY_DIE_SHAPES).map(Number);
+  return known.reduce((best,s)=> Math.abs(s-sides)<Math.abs(best-sides) ? s : best, known[0]);
 }
 
 function parseHotkeyFormula(formula) {
@@ -2984,15 +3050,48 @@ function renderHotkeyBar() {
   const list = el('hotkey-list'); if(!list) return;
   list.innerHTML = '';
   hotkeys.forEach(hk=>{
-    const btn = document.createElement('button');
-    btn.className = 'hotkey-btn' + (hk.formula ? '' : ' unset') + (hk.lightBg ? ' light-bg' : '');
-    btn.textContent = hk.name || '?';
-    if(hk.color) btn.style.background = hk.color;
-    btn.dataset.hkId = hk.id;
-    btn.title = hk.formula || 'Right-click to set up';
-    btn.addEventListener('click', ()=>fireHotkey(hk));
-    btn.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); showHotkeyCtxMenu(e, hk.id); });
-    list.appendChild(btn);
+    const fill = hk.fill || HOTKEY_DEFAULT_PALETTE.fill;
+    const stroke = hk.stroke || HOTKEY_DEFAULT_PALETTE.stroke;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'hotkey-die-btn';
+    wrap.dataset.hkId = hk.id;
+    wrap.title = hk.formula || 'Right-click to set up';
+
+    const dieBtn = document.createElement('button');
+    dieBtn.className = 'hotkey-die-clickable';
+    dieBtn.style.setProperty('--hk-fill', fill);
+    dieBtn.style.setProperty('--hk-stroke', stroke);
+
+    const largest = hk.formula ? getLargestDieSides(hk.formula) : null;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 60 60');
+    if(largest) {
+      svg.innerHTML = HOTKEY_DIE_SHAPES[nearestDieShape(largest)];
+    } else {
+      // Unconfigured (or no dice terms) — dashed placeholder circle, distinct from any real die
+      dieBtn.classList.add('unset');
+      svg.innerHTML = `<circle cx="30" cy="30" r="24" class="hk-die-poly"/>`;
+    }
+    dieBtn.appendChild(svg);
+
+    const caption = document.createElement('div');
+    caption.className = 'hotkey-die-caption';
+    caption.style.color = fill;
+    caption.textContent = hk.name || '?';
+
+    wrap.appendChild(dieBtn);
+    wrap.appendChild(caption);
+
+    const roll = ()=>{
+      dieBtn.classList.remove('rolling'); void dieBtn.offsetWidth;
+      dieBtn.classList.add('rolling');
+      dieBtn.addEventListener('animationend',()=>dieBtn.classList.remove('rolling'),{once:true});
+      fireHotkey(hk);
+    };
+    wrap.addEventListener('click', roll);
+    wrap.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); showHotkeyCtxMenu(e, hk.id); });
+    list.appendChild(wrap);
   });
   const addBtn = el('hotkey-add');
   if(addBtn) {
@@ -3992,7 +4091,7 @@ function scheduleFlip() {
   renderHotkeyBar();
   el('hotkey-add').addEventListener('click', ()=>{
     if(hotkeys.length >= HOTKEY_MAX) return;
-    hotkeys.push({ id: uid(), name:'New', formula:'', color:null });
+    hotkeys.push({ id: uid(), name:'New', formula:'', fill:HOTKEY_DEFAULT_PALETTE.fill, stroke:HOTKEY_DEFAULT_PALETTE.stroke });
     saveHotkeys();
     renderHotkeyBar();
   });
@@ -4028,26 +4127,15 @@ function scheduleFlip() {
     saveHotkeys();
     renderHotkeyBar();
   });
-  const HOTKEY_COLORS = [
-    {label:'Default',   value:null,      bg:'rgba(40,30,15,.85)', outline:'1px solid #888'},
-    {label:'Red',       value:'#7a2424', bg:'#7a2424'},
-    {label:'Green',     value:'#236b35', bg:'#236b35'},
-    {label:'Blue',      value:'#22518f', bg:'#22518f'},
-    {label:'Purple',    value:'#5a2c8f', bg:'#5a2c8f'},
-    {label:'Gold',      value:'#8a661c', bg:'#8a661c'},
-    {label:'Off-White', value:'#e8e0d0', bg:'#e8e0d0', light:true},
-  ];
   const hkColorRow = el('hk-color-row');
-  HOTKEY_COLORS.forEach(c=>{
+  HOTKEY_DIE_PALETTES.forEach(p=>{
     const s=document.createElement('div'); s.className='ctx-swatch';
-    s.style.background=c.bg; s.title=c.label;
-    if(c.outline) s.style.outline=c.outline;
+    s.style.background=p.fill; s.style.borderColor=p.stroke; s.title=p.label;
     hkColorRow.appendChild(s);
     s.addEventListener('click', ()=>{
       if(!hkCtxTarget) return;
       const hk=hotkeys.find(h=>h.id===hkCtxTarget); if(!hk) return;
-      hk.color = c.value;
-      hk.lightBg = !!c.light;
+      hk.fill = p.fill; hk.stroke = p.stroke;
       saveHotkeys(); renderHotkeyBar();
       el('hotkey-ctx-menu').classList.remove('open');
     });
