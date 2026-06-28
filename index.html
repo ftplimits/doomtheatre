@@ -2209,7 +2209,7 @@ function handleMsg(msg,fromConn) {
     case 'move_text':    { const t=S.textItems.find(t=>t.id===msg.id); if(t){ t.x=msg.x; t.y=msg.y; } renderTextLayer(); if(isHost) broadcast(msg,fromConn); break; }
     case 'remove_text':  S.textItems=S.textItems.filter(t=>t.id!==msg.id); renderTextLayer(); if(isHost) broadcast(msg,fromConn); break;
     case 'dice_roll': addLogEntry(msg.sides,msg.rolls,msg.total,msg.mode||'normal',msg.mod||0,msg.name); if(isHost) broadcast(msg,fromConn); break;
-    case 'hotkey_roll': addHotkeyLogEntry(msg.label,msg.breakdown,msg.total,msg.name); if(isHost) broadcast(msg,fromConn); break;
+    case 'hotkey_roll': addHotkeyLogEntry(msg.label,msg.breakdown,msg.total,msg.name,msg.hadNat20,msg.hadNat1); if(isHost) broadcast(msg,fromConn); break;
   }
 }
 
@@ -2936,27 +2936,30 @@ function parseHotkeyFormula(formula) {
   return {valid:true, terms};
 }
 function applyKeep(rolls, keep) {
-  if(!keep) return { sum: rolls.reduce((a,b)=>a+b,0), display: rolls.map(String) };
+  if(!keep) return { sum: rolls.reduce((a,b)=>a+b,0), display: rolls.map(String), keptValues: rolls };
   const indexed = rolls.map((v,i)=>({v,i}));
   const sorted = [...indexed].sort((a,b)=> keep.mode==='h' ? b.v-a.v : a.v-b.v);
   const keptIdx = new Set(sorted.slice(0, keep.count).map(x=>x.i));
-  let sum=0;
+  let sum=0; const keptValues=[];
   const display = rolls.map((v,i)=>{
-    if(keptIdx.has(i)) { sum+=v; return String(v); }
+    if(keptIdx.has(i)) { sum+=v; keptValues.push(v); return String(v); }
     return '('+v+')'; // dropped die, shown so the full roll stays visible/verifiable
   });
-  return { sum, display };
+  return { sum, display, keptValues };
 }
 function rollHotkeyFormula(formula) {
   const parsed = parseHotkeyFormula(formula);
   if(!parsed.valid) return null;
-  let total=0, breakdown=[];
+  let total=0, breakdown=[], hadNat20=false, hadNat1=false;
   parsed.terms.forEach(t=>{
     if(t.type==='dice'){
       let rolls=[];
       for(let i=0;i<t.count;i++) rolls.push(1+Math.floor(Math.random()*t.sides));
-      const {sum, display} = applyKeep(rolls, t.keep);
+      const {sum, display, keptValues} = applyKeep(rolls, t.keep);
       total += t.sign*sum;
+      if(t.sides===20) {
+        keptValues.forEach(v=>{ if(v===20) hadNat20=true; if(v===1) hadNat1=true; });
+      }
       const keepTag = t.keep ? `k${t.keep.mode}${t.keep.count}` : '';
       breakdown.push(`${t.sign<0?'-':breakdown.length?'+':''}${t.count}d${t.sides}${keepTag}[${display.join(',')}]`);
     } else {
@@ -2964,7 +2967,7 @@ function rollHotkeyFormula(formula) {
       breakdown.push(`${t.value>=0&&breakdown.length?'+':''}${t.value}`);
     }
   });
-  return {total, breakdown: breakdown.join(' ')};
+  return {total, breakdown: breakdown.join(' '), hadNat20, hadNat1};
 }
 function fireHotkey(hk) {
   if(!hk.formula) return; // unconfigured — right-click to set up
@@ -2973,8 +2976,9 @@ function fireHotkey(hk) {
   const myName = isHost
     ? (S.dmName||'DM')
     : (S.players.find(p=>p.discordUserId===discordUser?.id)?.name || discordUser?.username || 'Player');
-  send({type:'hotkey_roll', label:hk.name, breakdown:result.breakdown, total:result.total, name:myName});
-  playClickSound();
+  send({type:'hotkey_roll', label:hk.name, breakdown:result.breakdown, total:result.total, name:myName, hadNat20:result.hadNat20, hadNat1:result.hadNat1});
+  if(result.hadNat20 || result.hadNat1) playSound('nat', 0.7);
+  else playClickSound();
 }
 function renderHotkeyBar() {
   const list = el('hotkey-list'); if(!list) return;
