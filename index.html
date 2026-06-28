@@ -1610,13 +1610,28 @@ async function initDiscordSDK() {
     console.log('[Discord] SDK ready | channelId:', discordSdk.channelId);
 
     // ── Step 1: Authorize → get OAuth code ───────────────────────
-    const { code } = await discordSdk.commands.authorize({
-      client_id: CLIENT_ID,
-      response_type: 'code',
-      state: '',
-      prompt: 'none',
-      scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
-    });
+    // Try silently first (prompt:'none') — works instantly for anyone who has already
+    // authorized this app. If they haven't (e.g. first-time user), 'none' has no consent
+    // screen to fall back on and fails silently — so retry once with an explicit prompt.
+    let code;
+    try {
+      ({ code } = await discordSdk.commands.authorize({
+        client_id: CLIENT_ID,
+        response_type: 'code',
+        state: '',
+        prompt: 'none',
+        scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
+      }));
+    } catch(silentErr) {
+      console.warn('[Discord] Silent authorize failed, retrying with explicit consent prompt:', silentErr);
+      ({ code } = await discordSdk.commands.authorize({
+        client_id: CLIENT_ID,
+        response_type: 'code',
+        state: '',
+        prompt: 'consent',
+        scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
+      }));
+    }
 
     // ── Step 2: Exchange code for token via Cloudflare Worker ─────
     const tokenRes = await fetch(TOKEN_ENDPOINT, {
