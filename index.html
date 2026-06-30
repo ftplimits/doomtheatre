@@ -3689,8 +3689,13 @@ window.clearDraw   = ()  => { if(drawCtx) drawCtx.clearRect(0,0,GRID_W,GRID_H); 
 function saveEndpoint(path) {
   return (isDiscord ? '/.proxy/api' : 'https://dt-token.gnollboard.workers.dev') + path;
 }
-function getChannelId() {
-  return discordSdk?.channelId || roomCode || 'browser-mode';
+function getSaveScope() {
+  // Saves are scoped to channelId + dmDiscordId together — so each host has their own
+  // private save namespace even within the same channel. Guests share S.dmDiscordId via
+  // full_state sync, so this returns the same value for host and guests.
+  const channel = discordSdk?.channelId || roomCode || 'local';
+  const host    = S.dmDiscordId || 'unknown';
+  return `${channel}:${host}`;
 }
 function relativeTime(ts) {
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -3706,14 +3711,14 @@ async function cloudSave(name) {
   const res  = await fetch(saveEndpoint('/saves'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel: getChannelId(), name, data }),
+    body: JSON.stringify({ channel: getSaveScope(), name, data }),
   });
   if(!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
 
 async function cloudListSaves() {
-  const res = await fetch(saveEndpoint('/saves?channel=' + encodeURIComponent(getChannelId())));
+  const res = await fetch(saveEndpoint('/saves?channel=' + encodeURIComponent(getSaveScope())));
   if(!res.ok) throw new Error('HTTP ' + res.status);
   return (await res.json()).saves || [];
 }
