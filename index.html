@@ -302,6 +302,8 @@ body.panel-open #volume-bar { right:294px; }
 .res-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
 .res-thumb { aspect-ratio:1; border-radius:4px; overflow:hidden; background:rgba(255,255,255,.04); border:1px solid var(--border); cursor:pointer; transition:border-color .15s,transform .1s; position:relative; }
 .res-thumb:hover { border-color:var(--blood); transform:scale(1.06); }
+.res-thumb.drag-over { border-color:var(--gold); box-shadow:0 0 6px rgba(200,169,110,.5); transform:scale(1.06); }
+.res-thumb.dragging  { opacity:.4; }
 .res-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 .res-del { position:absolute; top:2px; right:2px; width:14px; height:14px; background:rgba(0,0,0,.75); border-radius:50%; display:none; align-items:center; justify-content:center; font-size:8px; color:#f88; cursor:pointer; }
 .res-thumb:hover .res-del { display:flex; }
@@ -416,7 +418,7 @@ body.panel-open #volume-bar { right:294px; }
 .dctx-mode-btn[data-mode="dis"]    { background:rgba(74,26,26,.5); border-color:#5a3a3a; color:#e07070; }
 .dctx-mode-btn.active { filter:brightness(1.5); outline:1px solid #fff; }
 
-#dice-log { position:fixed; bottom:20px; right:31px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:280px; background:rgba(0,0,0,.75); border-radius:6px; padding:6px 10px; }
+#dice-log { position:fixed; bottom:20px; right:5px; z-index:16; display:flex; flex-direction:column-reverse; gap:3px; pointer-events:none; max-width:280px; background:rgba(0,0,0,.75); border-radius:6px; padding:6px 10px; }
 body.panel-open #dice-log { right:301px; }
 .log-entry { font-family:'Cinzel',var(--font-display); font-size:17px; color:var(--gold); text-shadow:0 1px 4px rgba(0,0,0,1); text-align:right; white-space:nowrap; animation:log-in .2s ease both; }
 .log-entry.old { color:var(--gold-dim); font-size:15px; }
@@ -1596,7 +1598,7 @@ let isHost=false, isDiscord=false, roomCode=null;
 let myPeer=null, hostConn=null, guestConns=[];
 let receivedFullState=false; // guest-side: did we ever get accepted? used to detect denial vs disconnect
 const pendingConns = new Map(); // peerId → { conn, identity, fallbackTimer }
-let dragAsset=null, cDrag=null, zoneSwapDrag=null;
+let dragAsset=null, cDrag=null, zoneSwapDrag=null, reorderDrag=null;
 let aoeActive=null, aoeColor='#1a6fff', aoeDragStart=null;
 
 // ── UTIL ─────────────────────────────────────────────────────────
@@ -2729,8 +2731,48 @@ function buildLib(cid,items,clickFn) {
   items.forEach((item,idx)=>{
     const thumb=document.createElement('div'); thumb.className='res-thumb'; thumb.title=item.name||''; thumb.draggable=true;
     thumb.innerHTML=`<img src="${item.url}" alt="" draggable="false"><span class="res-del">✕</span>`;
-    thumb.addEventListener('dragstart',e=>{ dragAsset={url:item.url,name:item.name||'',cat}; e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain',cat); thumb.style.opacity='.5'; });
-    thumb.addEventListener('dragend',  ()=>{ dragAsset=null; thumb.style.opacity=''; });
+
+    // ── Drag-to-canvas (existing "place asset" flow) ──
+    thumb.addEventListener('dragstart',e=>{
+      // Holding Shift triggers a reorder drag within the grid; plain drag places the asset on canvas.
+      if(e.shiftKey) {
+        reorderDrag = {cat, fromIdx: idx, thumb};
+        thumb.classList.add('dragging');
+        e.dataTransfer.effectAllowed='move';
+        e.dataTransfer.setData('text/plain','reorder');
+        return;
+      }
+      dragAsset={url:item.url,name:item.name||'',cat};
+      e.dataTransfer.effectAllowed='copy';
+      e.dataTransfer.setData('text/plain',cat);
+      thumb.style.opacity='.5';
+    });
+    thumb.addEventListener('dragend',()=>{
+      dragAsset=null; thumb.style.opacity='';
+      thumb.classList.remove('dragging');
+      reorderDrag=null;
+      grid.querySelectorAll('.drag-over').forEach(t=>t.classList.remove('drag-over'));
+    });
+
+    // ── Reorder drop target ──
+    thumb.addEventListener('dragover',e=>{
+      if(!reorderDrag || reorderDrag.cat!==cat) return;
+      e.preventDefault(); e.dataTransfer.dropEffect='move';
+      grid.querySelectorAll('.drag-over').forEach(t=>t.classList.remove('drag-over'));
+      thumb.classList.add('drag-over');
+    });
+    thumb.addEventListener('dragleave',()=>thumb.classList.remove('drag-over'));
+    thumb.addEventListener('drop',e=>{
+      e.preventDefault(); e.stopPropagation();
+      thumb.classList.remove('drag-over');
+      if(!reorderDrag || reorderDrag.cat!==cat || reorderDrag.fromIdx===idx) return;
+      const arr=S.library[cat];
+      const [moved]=arr.splice(reorderDrag.fromIdx,1);
+      arr.splice(idx,0,moved);
+      renderLibraries();
+      if(isHost) broadcast({type:'sync_library',library:S.library},null);
+    });
+
     thumb.querySelector('img').addEventListener('click',()=>clickFn(item));
     thumb.querySelector('.res-del').addEventListener('click',e=>{ e.stopPropagation(); removeLib(cid,idx); });
     if(cat==='players'||cat==='npcs') {
