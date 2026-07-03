@@ -1924,13 +1924,14 @@ function handleIncomingConnection(conn) {
   conn.once('data', data => {
     if(data?.type === 'discord_identity') {
       entry.identity = { username: data.username, discordUserId: data.discordUserId };
-      renderJoinRequests();
-    } else {
+      renderJoinRequests(); // update name if prompt already showing
     }
   });
   conn.on('close', () => { pendingConns.delete(conn.peer); renderJoinRequests(); });
   conn.on('error', () => { pendingConns.delete(conn.peer); renderJoinRequests(); });
-  renderJoinRequests();
+  // Delay showing the prompt briefly so identity has time to arrive first —
+  // prevents "Unknown Player" appearing before the name comes in.
+  setTimeout(() => renderJoinRequests(), 1500);
 }
 function admitConn(peerId) {
   const entry = pendingConns.get(peerId); if(!entry) return;
