@@ -1822,19 +1822,24 @@ async function initDiscordSDK() {
 }
 
 function getDiscordPeerConfig() {
-  return {
-    host: window.location.hostname, path: '/peerjs', port: 443, secure: true, debug: 0,
+  const turnConfig = {
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        // TURN relay — used as fallback when direct P2P fails (cross-NAT, cross-region)
-        { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+        {
+          urls: [
+            'turn:global.relay.metered.ca:80',
+            'turn:global.relay.metered.ca:80?transport=tcp',
+            'turn:global.relay.metered.ca:443',
+            'turns:global.relay.metered.ca:443?transport=tcp'
+          ],
+          username:   'd74760be916f18af756fd5d7',
+          credential: 'OkcJUne9JGb4XNAf'
+        }
       ]
     }
   };
+  return { host: window.location.hostname, path: '/peerjs', port: 443, secure: true, debug: 0, ...turnConfig };
 }
 
 async function startDiscordSession(instanceId) {
@@ -1874,12 +1879,10 @@ async function startDiscordSession(instanceId) {
       myPeer.destroy();
 
       const user = await withTimeout(sdkPromise, 15000, null);
-      console.log('[DooM Theatre] GUEST identity resolved:', user ? `${user.username} (${user.id})` : 'null — timed out or failed');
 
       myPeer = new Peer(cfg);
       myPeer.on('open', guestId => {
         console.log('[DooM Theatre] GUEST peer id:', guestId);
-        console.log('[DooM Theatre] GUEST attempting hostConn to:', roomCode);
         hostConn = myPeer.connect(roomCode, { reliable: true });
         wireConn(hostConn, false);
         hostConn.on('open', () => {
@@ -1891,7 +1894,6 @@ async function startDiscordSession(instanceId) {
               username: user.global_name || user.username,
               avatarHash: user.avatar || null,
             });
-            console.log('[DooM Theatre] GUEST discord_identity sent:', user.global_name || user.username);
           } else {
             console.warn('[DooM Theatre] GUEST has no identity to send — will appear as Unknown Player');
           }
@@ -1909,7 +1911,7 @@ async function startDiscordSession(instanceId) {
 // ── PEERJS ───────────────────────────────────────────────────────
 function makePeer(id) {
   return new Promise((res,rej) => {
-    const o={host:CFG.peerHost,port:CFG.peerPort,path:CFG.peerPath,secure:CFG.peerSecure,config:getDiscordPeerConfig().config};
+    const o={host:CFG.peerHost,port:CFG.peerPort,path:CFG.peerPath,secure:CFG.peerSecure,...getDiscordPeerConfig()};
     const p=id?new Peer(id,o):new Peer(o);
     p.on('open',()=>res(p)); p.on('error',rej);
   });
@@ -1922,10 +1924,8 @@ function handleIncomingConnection(conn) {
   conn.once('data', data => {
     if(data?.type === 'discord_identity') {
       entry.identity = { username: data.username, discordUserId: data.discordUserId };
-      console.log('[DooM Theatre] HOST received identity from', conn.peer, ':', data.username, data.discordUserId);
       renderJoinRequests();
     } else {
-      console.warn('[DooM Theatre] HOST first message from', conn.peer, 'was not discord_identity:', data?.type);
     }
   });
   conn.on('close', () => { pendingConns.delete(conn.peer); renderJoinRequests(); });
