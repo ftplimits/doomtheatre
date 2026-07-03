@@ -1861,30 +1861,32 @@ async function startDiscordSession(instanceId) {
       console.log('[DooM Theatre] GUEST — connecting to host at:', roomCode);
       myPeer.destroy();
 
-      // Timeout-raced: identity must never block the real connection below — if Discord's
-      // auth flow hangs (e.g. a consent prompt that fails to render on some client), the
-      // guest should still join the actual session, just without a name attached yet.
       const user = await withTimeout(sdkPromise, 15000, null);
+      console.log('[DooM Theatre] GUEST identity resolved:', user ? `${user.username} (${user.id})` : 'null — timed out or failed');
 
       myPeer = new Peer(cfg);
       myPeer.on('open', guestId => {
         console.log('[DooM Theatre] GUEST peer id:', guestId);
+        console.log('[DooM Theatre] GUEST attempting hostConn to:', roomCode);
         hostConn = myPeer.connect(roomCode, { reliable: true });
         wireConn(hostConn, false);
         hostConn.on('open', () => {
+          console.log('[DooM Theatre] GUEST hostConn opened — sending discord_identity, user:', user?.username || 'null');
           setStatus('Connected', 'connected');
-          // Send identity only — host assigns avatar manually via right-click
           if(user) {
             hostConn.send({ type:'discord_identity',
               discordUserId: user.id,
               username: user.global_name || user.username,
               avatarHash: user.avatar || null,
             });
+            console.log('[DooM Theatre] GUEST discord_identity sent:', user.global_name || user.username);
+          } else {
+            console.warn('[DooM Theatre] GUEST has no identity to send — will appear as Unknown Player');
           }
         });
-        hostConn.on('error', e => { setStatus('Join failed', 'error'); console.error(e); });
+        hostConn.on('error', e => { setStatus('Join failed', 'error'); console.error('[DooM Theatre] GUEST hostConn error:', e); });
       });
-      myPeer.on('error', e => { setStatus('PeerJS error: ' + e.type, 'error'); console.error(e); });
+      myPeer.on('error', e => { setStatus('PeerJS error: ' + e.type, 'error'); console.error('[DooM Theatre] GUEST peer error:', e); });
     } else {
       setStatus('PeerJS error: ' + err.type, 'error');
       console.error('[DooM Theatre] PeerJS error:', err);
@@ -1904,13 +1906,14 @@ function makePeer(id) {
 function handleIncomingConnection(conn) {
   const entry = { conn, identity: null };
   pendingConns.set(conn.peer, entry);
-  // Capture the guest's one-shot discord_identity message (sent immediately on open)
-  // for display purposes only — .once() self-removes so it never double-fires
-  // alongside wireConn's persistent handler that gets attached on admit.
+  console.log('[DooM Theatre] HOST incoming connection from peer:', conn.peer);
   conn.once('data', data => {
     if(data?.type === 'discord_identity') {
       entry.identity = { username: data.username, discordUserId: data.discordUserId };
+      console.log('[DooM Theatre] HOST received identity from', conn.peer, ':', data.username, data.discordUserId);
       renderJoinRequests();
+    } else {
+      console.warn('[DooM Theatre] HOST first message from', conn.peer, 'was not discord_identity:', data?.type);
     }
   });
   conn.on('close', () => { pendingConns.delete(conn.peer); renderJoinRequests(); });
@@ -1919,17 +1922,19 @@ function handleIncomingConnection(conn) {
 }
 function admitConn(peerId) {
   const entry = pendingConns.get(peerId); if(!entry) return;
+  console.log('[DooM Theatre] HOST admitting peer:', peerId, '| identity:', entry.identity?.username || 'none');
   pendingConns.delete(peerId);
   renderJoinRequests();
   const conn = entry.conn;
   guestConns.push(conn);
   wireConn(conn, true);
-  if(entry.identity) discordPeers.set(conn.peer, entry.identity); // seed identity captured pre-admission
+  if(entry.identity) discordPeers.set(conn.peer, entry.identity);
   const sendInitialState = () => {
+    console.log('[DooM Theatre] HOST sending full_state to:', peerId);
     conn.send({ type:'full_state', state:S });
     if(musicCurrentFile) conn.send({type:'music_play', file:musicCurrentFile, time:musicAudio.currentTime});
   };
-  if(conn.open) sendInitialState(); else conn.once('open', sendInitialState);
+  if(conn.open) sendInitialState(); else { console.warn('[DooM Theatre] HOST conn not open yet, waiting for open event'); conn.once('open', sendInitialState); }
   setPeerCount();
   updatePeerList();
   setStatus(`${guestConns.length} connected`, 'connected');
@@ -1979,8 +1984,8 @@ function broadcast(msg,exc) { guestConns.forEach(c=>{ if(c!==exc&&c.open) c.send
 // ── MESSAGES ─────────────────────────────────────────────────────
 function handleMsg(msg,fromConn) {
   switch(msg.type) {
-    case 'full_state':    S=msg.state; receivedFullState=true; renderAll(); if(S.nightMode) applyNight(true); hideLoadingOverlay(); break;
-    case 'join_denied':   setStatus('Join request denied by host', 'error'); hideLoadingOverlay(); break;
+    case 'full_state':    S=msg.state; receivedFullState=true; console.log('[DooM Theatre] GUEST full_state received, players:', S.players.length, 'npcs:', S.npcs.length); renderAll(); if(S.nightMode) applyNight(true); hideLoadingOverlay(); break;
+    case 'join_denied':   console.warn('[DooM Theatre] GUEST join was denied by host'); setStatus('Join request denied by host', 'error'); hideLoadingOverlay(); break;
     case 'set_backdrop':  S.backdrop=msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_name': S.dmName=msg.name; el('dm-label').textContent=msg.name; if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_avatar': S.dmAvatar=msg.url; S.dmName=msg.name||null; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
