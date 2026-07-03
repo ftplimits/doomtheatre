@@ -304,6 +304,13 @@ body.panel-open #volume-bar { right:294px; }
 .res-thumb:hover { border-color:var(--blood); transform:scale(1.06); }
 .res-thumb.drag-over { border-color:var(--gold); box-shadow:0 0 6px rgba(200,169,110,.5); transform:scale(1.06); }
 .res-thumb.dragging  { opacity:.4; }
+.res-drag-handle {
+  position:absolute; bottom:2px; left:2px; font-size:12px; line-height:1;
+  color:rgba(255,255,255,.5); cursor:grab; display:none; user-select:none;
+  text-shadow:0 1px 2px rgba(0,0,0,.8);
+}
+.res-thumb:hover .res-drag-handle { display:block; }
+.res-drag-handle:active { cursor:grabbing; }
 .res-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 .res-del { position:absolute; top:2px; right:2px; width:14px; height:14px; background:rgba(0,0,0,.75); border-radius:50%; display:none; align-items:center; justify-content:center; font-size:8px; color:#f88; cursor:pointer; }
 .res-thumb:hover .res-del { display:flex; }
@@ -2748,18 +2755,11 @@ function buildLib(cid,items,clickFn) {
   const cat=catMap[cid], grid=el(cid); grid.innerHTML='';
   items.forEach((item,idx)=>{
     const thumb=document.createElement('div'); thumb.className='res-thumb'; thumb.title=item.name||''; thumb.draggable=true;
-    thumb.innerHTML=`<img src="${item.url}" alt="" draggable="false"><span class="res-del">✕</span>`;
+    thumb.innerHTML=`<img src="${item.url}" alt="" draggable="false"><span class="res-del">✕</span><span class="res-drag-handle" draggable="true" title="Drag to reorder">⠿</span>`;
 
-    // ── Drag-to-canvas (existing "place asset" flow) ──
+    // ── Place-on-canvas drag (main thumb) ──
     thumb.addEventListener('dragstart',e=>{
-      // Holding Shift triggers a reorder drag within the grid; plain drag places the asset on canvas.
-      if(e.shiftKey) {
-        reorderDrag = {cat, fromIdx: idx, thumb};
-        thumb.classList.add('dragging');
-        e.dataTransfer.effectAllowed='move';
-        e.dataTransfer.setData('text/plain','reorder');
-        return;
-      }
+      if(e.target.classList.contains('res-drag-handle')) return; // handle has its own dragstart
       dragAsset={url:item.url,name:item.name||'',cat};
       e.dataTransfer.effectAllowed='copy';
       e.dataTransfer.setData('text/plain',cat);
@@ -2767,6 +2767,20 @@ function buildLib(cid,items,clickFn) {
     });
     thumb.addEventListener('dragend',()=>{
       dragAsset=null; thumb.style.opacity='';
+      if(!reorderDrag){ thumb.classList.remove('dragging'); }
+    });
+
+    // ── Reorder drag (handle only) ──
+    const handle = thumb.querySelector('.res-drag-handle');
+    handle.addEventListener('dragstart',e=>{
+      e.stopPropagation();
+      reorderDrag = {cat, fromIdx: idx, thumb};
+      thumb.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain','reorder');
+    });
+    handle.addEventListener('dragend',e=>{
+      e.stopPropagation();
       thumb.classList.remove('dragging');
       reorderDrag=null;
       grid.querySelectorAll('.drag-over').forEach(t=>t.classList.remove('drag-over'));
