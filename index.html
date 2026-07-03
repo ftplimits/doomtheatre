@@ -1822,7 +1822,19 @@ async function initDiscordSDK() {
 }
 
 function getDiscordPeerConfig() {
-  return { host: window.location.hostname, path: '/peerjs', port: 443, secure: true, debug: 0 };
+  return {
+    host: window.location.hostname, path: '/peerjs', port: 443, secure: true, debug: 0,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        // TURN relay — used as fallback when direct P2P fails (cross-NAT, cross-region)
+        { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      ]
+    }
+  };
 }
 
 async function startDiscordSession(instanceId) {
@@ -1897,7 +1909,7 @@ async function startDiscordSession(instanceId) {
 // ── PEERJS ───────────────────────────────────────────────────────
 function makePeer(id) {
   return new Promise((res,rej) => {
-    const o={host:CFG.peerHost,port:CFG.peerPort,path:CFG.peerPath,secure:CFG.peerSecure};
+    const o={host:CFG.peerHost,port:CFG.peerPort,path:CFG.peerPath,secure:CFG.peerSecure,config:getDiscordPeerConfig().config};
     const p=id?new Peer(id,o):new Peer(o);
     p.on('open',()=>res(p)); p.on('error',rej);
   });
