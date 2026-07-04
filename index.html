@@ -2053,7 +2053,7 @@ function handleMsg(msg,fromConn) {
       // rather than flooding everyone's screen with a cascade of flips.
       const nowFlip = performance.now();
       const lastFlip = flipCooldown.get(msg.id) || 0;
-      if(nowFlip - lastFlip < 400) break; // too soon — drop silently, no state change, no relay
+      if(nowFlip - lastFlip < 5000) break; // drop duplicates — host drives at 6-12s intervals
       flipCooldown.set(msg.id, nowFlip);
       if(msg.id==='__dm__') {
         S.dmFlipped=msg.flipped;
@@ -3917,14 +3917,13 @@ function buildWeatherMenu(active) {
 }
 window.applyWeather=function(fx){ startWeather(fx); buildWeatherMenu(fx); };
 function scheduleFlip() {
+  if(!isHost) return; // only the host drives the flip timer — guests receive via broadcast
   setTimeout(()=>{
     if(!S.combatMode) {
-      // Pool: all players + npcs + DM avatar (represented by sentinel)
       const pool=[...S.players,...S.npcs,{id:'__dm__',flipped:S.dmFlipped}];
       if(pool.length){
         const obj=pool[Math.floor(Math.random()*pool.length)];
-        const newFlip=!obj.flipped;
-        send({type:'flip_avatar', id:obj.id, flipped:newFlip});
+        send({type:'flip_avatar', id:obj.id, flipped:!obj.flipped});
       }
     }
     scheduleFlip();
