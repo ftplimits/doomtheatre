@@ -584,11 +584,11 @@ body.discord-mode .browser-only { display:none !important; }
   background:
     radial-gradient(ellipse 55% 35% at 50% 100%, rgba(200,169,110,0.06) 0%, transparent 70%),
     radial-gradient(ellipse 100% 80% at 50% 50%, #1c1c1c 0%, #111 45%, #000 100%);
-  animation: ib-fade 3.6s ease forwards;
+  animation: ib-fade 5s ease forwards;
 }
 @keyframes ib-fade {
   0%      { opacity:1; }
-  60%     { opacity:1; }
+  80%     { opacity:1; }
   100%    { opacity:0; }
 }
 .ib-spots {
@@ -4291,6 +4291,7 @@ function scheduleFlip() {
       group.classList.remove('rolling'); void group.offsetWidth;
       group.classList.add('rolling');
       group.addEventListener('animationend', ()=>group.classList.remove('rolling'), {once:true});
+      playClickSound();
       rollOdnd(count);
     });
     // Scroll wheel changes the shared OD&D modifier (capped ±5)
@@ -4301,8 +4302,16 @@ function scheduleFlip() {
     }, {passive:false});
   });
 
-  // Sync OD&D palette colour button to use same palette popup as modern tray
-  el('dice-palette-btn-odnd')?.addEventListener('click', ()=>el('dice-palette-btn').click());
+  // OD&D palette button — open the shared popup positioned relative to itself
+  el('dice-palette-btn-odnd')?.addEventListener('click', e=>{
+    e.stopPropagation();
+    const popup=el('dice-palette-popup');
+    popup.classList.toggle('open');
+    if(popup.classList.contains('open')){
+      const btnR=e.currentTarget.getBoundingClientRect();
+      popup.style.left = (btnR.left + btnR.width/2 - popup.offsetWidth/2)+'px';
+    }
+  });
 
   // ── VOLUME SLIDER (all players) ──────────────────────────────────
   musicAudio.volume = 0.3;
