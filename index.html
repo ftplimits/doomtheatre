@@ -513,7 +513,7 @@ body.panel-open #dice-log { right:301px; }
 body.drag-over-scene #canvas { outline:3px solid var(--gold-dim); outline-offset:-3px; }
 
 /* ── WEATHER CANVAS ── */
-#weather-canvas { position:fixed; inset:0; pointer-events:none; z-index:12; }
+#weather-canvas { position:fixed; inset:0; pointer-events:none; z-index:10001; }
 
 /* ── WEATHER MENU ── */
 #weather-menu {
@@ -1009,6 +1009,51 @@ body.combat #death-popup { top:32px; transform:translateX(-50%); }
   z-index:15; display:flex; flex-direction:column; align-items:center;
 }
 
+/* ── OD&D + CHAINMAIL DICE TRAY ── */
+#odnd-row {
+  display:flex; align-items:center; gap:18px;
+  background:rgba(0,0,0,.55); border:1px solid var(--border);
+  border-radius:12px; padding:8px 16px;
+}
+.odnd-group {
+  display:flex; align-items:center; gap:3px;
+  background:none; border:none; cursor:pointer; padding:3px;
+  border-radius:8px; transition:filter .15s, transform .15s;
+}
+.odnd-group:hover  { filter:drop-shadow(0 0 6px rgba(200,169,110,.7)); transform:scale(1.08); }
+.odnd-group:active { transform:scale(.93); }
+.odnd-die { width:42px; height:42px; display:block; transform-origin:50% 50%; }
+.odnd-group.rolling .odnd-die { animation:die-spin .45s cubic-bezier(.3,.8,.4,1); }
+.odnd-group.rolling .odnd-die:nth-child(2) { animation-delay:.05s; }
+.odnd-group.rolling .odnd-die:nth-child(3) { animation-delay:.10s; }
+.odnd-group.rolling .odnd-die:nth-child(4) { animation-delay:.15s; }
+.odnd-pip { fill:var(--dice-stroke); }
+.odnd-mod-badge {
+  font-family:'Cinzel',var(--font-display); font-size:13px; font-weight:700;
+  color:var(--gold); min-width:24px; text-align:center;
+  display:none;
+}
+.odnd-mod-badge.visible { display:block; }
+
+/* ── SYSTEM SWITCHER ── */
+#system-menu {
+  position:fixed; z-index:80; min-width:180px;
+  background:rgba(8,4,2,.96); border:1px solid var(--border);
+  border-radius:5px; padding:4px 0; display:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.7);
+  font-family:'Cinzel',var(--font-display); font-size:11px;
+}
+#system-menu.open { display:block; }
+.sys-item {
+  padding:8px 14px; cursor:pointer; color:var(--text);
+  letter-spacing:.06em; text-transform:uppercase; font-size:10px;
+  transition:background .12s, color .12s;
+}
+.sys-item:hover { background:rgba(139,0,0,.4); color:#ff9090; }
+.sys-item.active { color:var(--gold); }
+.sys-item .sys-check { margin-right:6px; opacity:0; }
+.sys-item.active .sys-check { opacity:1; }
+
 /* ── AOE TOOLBAR — left side, vertical ── */
 #aoe-toolbar {
   position:fixed; left:16px; top:50%; transform:translateY(-50%);
@@ -1304,9 +1349,36 @@ body.combat #aoe-layer { display:block; }
     <button class="die-btn" data-sides="100" title="d100"><span class="die-badge"></span><svg viewBox="0 0 60 60"><polygon points="52,21 39,8 21,8 8,21 8,39 21,52 39,52 52,39" class="die-poly"/><text x="30" y="34" class="die-label" style="font-size:9px">d100</text></svg></button>
     <div id="dice-palette-btn" title="Dice Colour"></div>
   </div>
+  <!-- OD&D + CHAINMAIL TRAY (hidden by default) -->
+  <div id="odnd-row" style="display:none">
+    <button class="odnd-group" data-dice="1" title="1d6 (scroll to add modifier)">
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="22" cy="22" r="3.5" class="odnd-pip"/></svg>
+    </button>
+    <button class="odnd-group" data-dice="2" title="2d6 (scroll to add modifier)">
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+    </button>
+    <button class="odnd-group" data-dice="3" title="3d6 (scroll to add modifier)">
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="22" cy="22" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="22" cy="22" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="22" cy="22" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+    </button>
+    <button class="odnd-group" data-dice="4" title="4d6 (scroll to add modifier)">
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="31" cy="13" r="3.5" class="odnd-pip"/><circle cx="13" cy="31" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="31" cy="13" r="3.5" class="odnd-pip"/><circle cx="13" cy="31" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="31" cy="13" r="3.5" class="odnd-pip"/><circle cx="13" cy="31" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+      <svg class="odnd-die" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" class="die-poly-rect"/><circle cx="13" cy="13" r="3.5" class="odnd-pip"/><circle cx="31" cy="13" r="3.5" class="odnd-pip"/><circle cx="13" cy="31" r="3.5" class="odnd-pip"/><circle cx="31" cy="31" r="3.5" class="odnd-pip"/></svg>
+    </button>
+    <div id="odnd-mod-badge" class="odnd-mod-badge"></div>
+    <div id="dice-palette-btn-odnd" title="Dice Colour"></div>
+  </div>
 <button id="dice-toggle" title="Toggle Dice">▼</button>
 </div>
 <div id="dice-palette-popup"></div>
+<div id="system-menu">
+  <div class="sys-item active" data-system="modern"><span class="sys-check">✓</span>DnD Modern</div>
+  <div class="sys-item" data-system="odnd"><span class="sys-check">✓</span>OD&amp;D + Chainmail</div>
+</div>
 <div id="dice-log"></div>
 
 <!-- WEATHER CANVAS -->
@@ -1531,6 +1603,7 @@ body.combat #aoe-layer { display:block; }
 
 <!-- TOOLBAR: combat leftmost, screen rightmost -->
 <div id="toolbar">
+  <button class="tbtn" id="btn-system"  title="Change System">⚄</button>
   <button class="tbtn" id="btn-combat"  title="Combat Mode">⚔️</button>
   <button class="tbtn" id="btn-music"   title="Music">🎵</button>
   <button class="tbtn" id="btn-weather" title="Weather">🌦</button>
@@ -1590,7 +1663,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:'dust', nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[], textItems:[], handoutLog:[],
+  combatMode:false, weather:'dust', nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[], textItems:[], handoutLog:[], system:'modern',
   dmDiscordId: null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
@@ -2221,6 +2294,7 @@ function handleMsg(msg,fromConn) {
       break;
     case 'set_weather': S.weather=msg.effect; if(window.applyWeather) window.applyWeather(msg.effect); if(isHost) broadcast(msg,fromConn); break;
     case 'set_night':   applyNight(msg.active); if(isHost) broadcast(msg,fromConn); break;
+    case 'set_system':  S.system=msg.system; currentSystem=msg.system; applySystem(msg.system); if(isHost) broadcast(msg,fromConn); break;
     case 'set_torch': {
       if(msg.entityType==='dm') S.dmTorch = msg.active;
       else { const arr=msg.entityType==='player'?S.players:S.npcs; const obj=arr.find(o=>o.id===msg.id); if(obj) obj.torch=msg.active; }
@@ -2295,7 +2369,7 @@ function syncCombatState() {
   el('combat-arena').innerHTML='';
   if(S.combatMode){ assignCombatPositions(); renderCombatArena(); }
 }
-function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); renderTextLayer(); updateHandoutLog(); if(window.applyWeather) window.applyWeather(S.weather); recalcInitiative(); }
+function renderAll() { renderBackdrop(); renderDmAvatar(); renderUpperZone(); renderLowerZone(); syncCombatState(); renderLibraries(); renderAoeLayer(); renderTextLayer(); updateHandoutLog(); applySystem(S.system||'modern'); if(window.applyWeather) window.applyWeather(S.weather); recalcInitiative(); }
 function renderBackdrop() { el('backdrop').style.backgroundImage=S.backdrop?`url('${S.backdrop}')`:''; }
 function renderDmAvatar() {
   el('dm-av-frame').innerHTML=S.dmAvatar?`<img src="${S.dmAvatar}" alt="DM">`:`<div class="av-placeholder">👁</div>`;
@@ -2892,6 +2966,35 @@ function applyNpc(item) {
 const diceLog=[], LOG_MAX=10;
 const diceState={};  // {sides: {count, mode}}
 let popTimer=null;
+let currentSystem = 'modern'; // 'modern' | 'odnd'
+let odndMod = 0; // OD&D shared modifier, capped ±5
+
+function applySystem(sys) {
+  // Pure DOM application — always called from handleMsg after S is already updated
+  el('dice-row').style.display  = sys==='modern' ? 'flex' : 'none';
+  el('odnd-row').style.display  = sys==='odnd'   ? 'flex' : 'none';
+  document.querySelectorAll('.sys-item').forEach(i=>i.classList.toggle('active', i.dataset.system===sys));
+  el('btn-system').title = sys==='modern' ? 'System: DnD Modern' : 'System: OD&D + Chainmail';
+}
+
+function rollOdnd(count) {
+  const rolls=[];
+  for(let i=0;i<count;i++) rolls.push(rnd(6));
+  const rawTotal = rolls.reduce((a,b)=>a+b,0);
+  const total = rawTotal + odndMod;
+  const myName = isHost
+    ? (S.dmName||'DM')
+    : (S.players.find(p=>p.discordUserId===discordUser?.id)?.name || discordUser?.username || 'Player');
+  // Reuse dice_roll message with sides=6 so it appears in the log correctly
+  send({type:'dice_roll', sides:6, rolls, total, mode:'normal', mod:odndMod, name:myName});
+}
+
+function updateOdndModBadge() {
+  const badge = el('odnd-mod-badge');
+  if(odndMod===0){ badge.textContent=''; badge.classList.remove('visible'); return; }
+  badge.textContent = odndMod>0 ? `+${odndMod}` : String(odndMod);
+  badge.classList.add('visible');
+}
 
 function getDSt(sides){ if(!diceState[sides]) diceState[sides]={count:1,mode:'normal',mod:0}; return diceState[sides]; }
 function rnd(s){ return Math.floor(Math.random()*s)+1; }
@@ -3936,6 +4039,8 @@ function scheduleFlip() {
 // ── INIT ─────────────────────────────────────────────────────────
 (async function init() {
   updateScale();
+  // Start dust immediately so it floats over the intro banner during load-in
+  startWeather('dust');
   // Loading overlay UX: reveal reassurance text after 4s, force-hide after 20s so it never gets stuck
   setTimeout(()=>{ const st=el('loading-subtext'); if(st) st.classList.add('show'); }, 4000);
   setTimeout(()=>{ hideLoadingOverlay(); }, 20000);
@@ -4143,9 +4248,51 @@ function scheduleFlip() {
   let diceVisible=true;
   el('dice-toggle').addEventListener('click', ()=>{
     diceVisible=!diceVisible;
-    el('dice-row').style.display=diceVisible?'':'none';
+    // Show/hide whichever tray is currently active
+    if(currentSystem==='modern') el('dice-row').style.display=diceVisible?'flex':'none';
+    else el('odnd-row').style.display=diceVisible?'flex':'none';
     el('dice-toggle').textContent=diceVisible?'▼':'▲';
   });
+
+  // ── SYSTEM SWITCHER ──────────────────────────────────────────────
+  el('btn-system').addEventListener('click', e=>{
+    e.stopPropagation();
+    const menu=el('system-menu');
+    const btn=el('btn-system');
+    const r=btn.getBoundingClientRect();
+    menu.style.right=(window.innerWidth-r.right)+'px';
+    menu.style.top=(r.bottom+6)+'px';
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('pointerdown', e=>{
+    if(!e.target?.closest?.('#system-menu,#btn-system')) el('system-menu').classList.remove('open');
+  }, true);
+  document.querySelectorAll('.sys-item').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      send({type:'set_system', system:item.dataset.system});
+      el('system-menu').classList.remove('open');
+    });
+  });
+
+  // ── OD&D GROUP CLICK (roll all dice in group + spin each) ────────
+  document.querySelectorAll('.odnd-group').forEach(group=>{
+    group.addEventListener('click', ()=>{
+      const count=parseInt(group.dataset.dice,10);
+      group.classList.remove('rolling'); void group.offsetWidth;
+      group.classList.add('rolling');
+      group.addEventListener('animationend', ()=>group.classList.remove('rolling'), {once:true});
+      rollOdnd(count);
+    });
+    // Scroll wheel changes the shared OD&D modifier (capped ±5)
+    group.addEventListener('wheel', e=>{
+      e.preventDefault();
+      odndMod = Math.max(-5, Math.min(5, odndMod + (e.deltaY<0?1:-1)));
+      updateOdndModBadge();
+    }, {passive:false});
+  });
+
+  // Sync OD&D palette colour button to use same palette popup as modern tray
+  el('dice-palette-btn-odnd')?.addEventListener('click', ()=>el('dice-palette-btn').click());
 
   // ── VOLUME SLIDER (all players) ──────────────────────────────────
   musicAudio.volume = 0.3;
@@ -4702,11 +4849,13 @@ function scheduleFlip() {
   let activePalette = DICE_PALETTES[0];
   function applyDicePalette(p) {
     activePalette = p;
-    currentDiceFill = p.fill; // exposed at top level for addLogEntry
+    currentDiceFill = p.fill;
     document.documentElement.style.setProperty('--dice-fill',   p.fill);
     document.documentElement.style.setProperty('--dice-stroke', p.stroke);
     el('dice-palette-btn').style.background = p.fill;
     el('dice-palette-btn').style.borderColor = p.stroke;
+    const odndBtn = el('dice-palette-btn-odnd');
+    if(odndBtn){ odndBtn.style.background = p.fill; odndBtn.style.borderColor = p.stroke; }
     document.querySelectorAll('.dswatch').forEach(s=>s.classList.toggle('active', s.dataset.palette===p.label));
   }
   // Build palette popup
