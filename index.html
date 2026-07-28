@@ -1410,7 +1410,7 @@ body.combat #aoe-layer { display:block; }
   <div class="cm-item" data-cur="crosshair">✦ Runic Crosshair</div>
   <div class="cm-item" data-cur="quill">✒ Quill</div>
   <div class="cm-item" data-cur="arcane">🖐 Necrotic Grasp</div>
-  <div class="cm-item" data-cur="skull">💀 Gnoll Skull</div>
+  <div class="cm-item" data-cur="skull">💀 DooM Skull</div>
   <div style="height:1px;background:var(--border);margin:3px 0"></div>
   <div class="cm-item" id="cm-clear-init">✕ Clear Initiative</div>
 </div>
@@ -1505,7 +1505,7 @@ body.combat #aoe-layer { display:block; }
     <div class="ib-corner ib-br"></div>
     <div class="ib-ornament">⚔ &nbsp; ✦ &nbsp; ⚔</div>
     <div class="ib-rule"></div>
-    <div class="ib-title">GNOLL<br>THEATRE</div>
+    <div class="ib-title">DooM<br>THEATRE</div>
     <div class="ib-rule"></div>
     <p class="ib-sub">Theatre &nbsp;of &nbsp;the &nbsp;Mind</p>
     <div class="ib-ornament" style="margin-top:14px;margin-bottom:0">⚔ &nbsp; ✦ &nbsp; ⚔</div>
@@ -1767,31 +1767,34 @@ async function initDiscordSDK() {
     console.log('[Discord] SDK ready | channelId:', discordSdk.channelId);
 
     // ── Step 1: Authorize → get OAuth code ───────────────────────
-    // Try silently first (prompt:'none') — works instantly for anyone who has already
-    // authorized this app. If they haven't (e.g. first-time user), 'none' has no consent
-    // screen to fall back on — it may throw, OR it may just resolve with an empty code
-    // without throwing at all, so we check both cases before retrying with an explicit prompt.
+    // Full scopes first (works in server voice channels).
+    // guilds.members.read is server-only — falls back to minimal scopes for group DMs.
+    const FULL_SCOPES    = ['identify', 'guilds.members.read', 'rpc.voice.read'];
+    const MINIMAL_SCOPES = ['identify', 'rpc.voice.read'];
     let code;
     try {
       ({ code } = await discordSdk.commands.authorize({
-        client_id: CLIENT_ID,
-        response_type: 'code',
-        state: '',
-        prompt: 'none',
-        scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
+        client_id: CLIENT_ID, response_type: 'code', state: '', prompt: 'none',
+        scope: FULL_SCOPES,
       }));
     } catch(silentErr) {
-      console.warn('[Discord] Silent authorize threw, will retry with explicit consent prompt:', silentErr);
+      console.warn('[Discord] Silent authorize threw:', silentErr);
     }
     if(!code) {
-      console.warn('[Discord] Silent authorize produced no code, retrying with explicit consent prompt');
-      ({ code } = await discordSdk.commands.authorize({
-        client_id: CLIENT_ID,
-        response_type: 'code',
-        state: '',
-        prompt: 'consent',
-        scope: ['identify', 'guilds.members.read', 'rpc.voice.read'],
-      }));
+      // Try explicit consent with full scopes first, then fall back to minimal if that fails
+      // (group DM context will reject guilds.members.read)
+      try {
+        ({ code } = await discordSdk.commands.authorize({
+          client_id: CLIENT_ID, response_type: 'code', state: '', prompt: 'consent',
+          scope: FULL_SCOPES,
+        }));
+      } catch(fullErr) {
+        console.warn('[Discord] Full scope authorize failed, retrying with minimal scopes (group DM?):', fullErr);
+        ({ code } = await discordSdk.commands.authorize({
+          client_id: CLIENT_ID, response_type: 'code', state: '', prompt: 'consent',
+          scope: MINIMAL_SCOPES,
+        }));
+      }
     }
 
     // ── Step 2: Exchange code for token via Cloudflare Worker ─────
