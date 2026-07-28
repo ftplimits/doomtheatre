@@ -368,6 +368,14 @@ body.panel-open #volume-bar { right:294px; }
   transition:transform .15s, box-shadow .15s;
 }
 #dice-palette-btn:hover { transform:scale(1.25); box-shadow:0 0 6px rgba(255,255,255,.3); }
+#dice-palette-btn-odnd {
+  width:18px; height:18px; border-radius:3px; cursor:pointer; flex-shrink:0;
+  border:2px solid rgba(0,0,0,.5); margin-left:8px;
+  transition:transform .15s, box-shadow .15s;
+}
+#dice-palette-btn-odnd:hover { transform:scale(1.25); box-shadow:0 0 6px rgba(255,255,255,.3); }
+.odnd-mod-badge.positive { color:#4ecb71; }
+.odnd-mod-badge.negative { color:#e85555; }
 /* Palette popup — floats above toggle */
 #dice-palette-popup {
   position:fixed; z-index:16;
@@ -2991,9 +2999,11 @@ function rollOdnd(count) {
 
 function updateOdndModBadge() {
   const badge = el('odnd-mod-badge');
-  if(odndMod===0){ badge.textContent=''; badge.classList.remove('visible'); return; }
+  if(odndMod===0){ badge.textContent=''; badge.classList.remove('visible','positive','negative'); return; }
   badge.textContent = odndMod>0 ? `+${odndMod}` : String(odndMod);
   badge.classList.add('visible');
+  badge.classList.toggle('positive', odndMod>0);
+  badge.classList.toggle('negative', odndMod<0);
 }
 
 function getDSt(sides){ if(!diceState[sides]) diceState[sides]={count:1,mode:'normal',mod:0}; return diceState[sides]; }
