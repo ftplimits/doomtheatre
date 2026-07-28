@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DooM Theatre</title>
+<title>Monomyth VTT</title>
 <script src="discord-sdk.js"></script>
 <script src="peerjs.min.js"></script>
 <style>
@@ -574,8 +574,8 @@ body.discord-mode .browser-only { display:none !important; }
   position:fixed; inset:0; z-index:10000; pointer-events:none;
   display:flex; align-items:center; justify-content:center;
   background:
-    radial-gradient(ellipse 55% 35% at 50% 100%, rgba(180,60,0,0.10) 0%, transparent 70%),
-    radial-gradient(ellipse 100% 80% at 50% 50%, #360006 0%, #0d0001 45%, #000 100%);
+    radial-gradient(ellipse 55% 35% at 50% 100%, rgba(200,169,110,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 80% at 50% 50%, #1c1c1c 0%, #111 45%, #000 100%);
   animation: ib-fade 3.6s ease forwards;
 }
 @keyframes ib-fade {
@@ -592,10 +592,10 @@ body.discord-mode .browser-only { display:none !important; }
   padding:52px 80px;
   border:1px solid rgba(200,169,110,.35);
   box-shadow:
-    0 0 0 6px rgba(80,0,0,.5),
-    0 0 0 7px rgba(200,169,110,.15),
-    0 0 80px rgba(139,0,0,.6),
-    inset 0 0 100px rgba(0,0,0,.4);
+    0 0 0 6px rgba(10,10,10,.8),
+    0 0 0 7px rgba(200,169,110,.18),
+    0 0 80px rgba(200,169,110,.12),
+    inset 0 0 100px rgba(0,0,0,.5);
 }
 .ib-corner {
   position:absolute; width:18px; height:18px;
@@ -618,12 +618,12 @@ body.discord-mode .browser-only { display:none !important; }
   font-family:'Cinzel',var(--font-display);
   font-size:clamp(52px,9vw,110px);
   font-weight:900; letter-spacing:.22em; line-height:1.08;
-  color:#fff;
+  color:var(--gold);
   text-shadow:
-    0 0 30px rgba(180,0,20,.95),
-    0 0 70px rgba(139,0,0,.7),
-    0 0 120px rgba(100,0,0,.4),
-    0 2px 4px rgba(0,0,0,.8);
+    0 0 30px rgba(200,169,110,.5),
+    0 0 70px rgba(200,169,110,.25),
+    0 0 120px rgba(200,169,110,.12),
+    0 2px 4px rgba(0,0,0,.9);
   margin:0;
 }
 .ib-sub {
@@ -1178,7 +1178,7 @@ body.combat #aoe-layer { display:block; }
 <!-- DISCORD-ONLY LOCKOUT (blocks public/non-Discord access) -->
 <div id="discord-only-screen">
   <div class="dos-box">
-    <div class="dos-title">⚔️ DooM Theatre</div>
+    <div class="dos-title">⚔️ Monomyth VTT</div>
     <div class="dos-text">This is a Discord Activity and can only be launched from within Discord.</div>
     <div class="dos-sub">Open a voice channel in your server and launch the Activity from there.</div>
   </div>
@@ -1187,7 +1187,7 @@ body.combat #aoe-layer { display:block; }
 <!-- LOADING OVERLAY -->
 <div id="loading-overlay">
   <div id="loading-spinner"></div>
-  <div id="loading-text">Entering the Theatre…</div>
+  <div id="loading-text">Entering Monomyth…</div>
   <div id="loading-subtext">Still connecting — this can take a few extra seconds, or the host may need to admit you</div>
 </div>
 
@@ -1410,7 +1410,7 @@ body.combat #aoe-layer { display:block; }
   <div class="cm-item" data-cur="crosshair">✦ Runic Crosshair</div>
   <div class="cm-item" data-cur="quill">✒ Quill</div>
   <div class="cm-item" data-cur="arcane">🖐 Necrotic Grasp</div>
-  <div class="cm-item" data-cur="skull">💀 DooM Skull</div>
+  <div class="cm-item" data-cur="skull">💀 Monomyth Skull</div>
   <div style="height:1px;background:var(--border);margin:3px 0"></div>
   <div class="cm-item" id="cm-clear-init">✕ Clear Initiative</div>
 </div>
@@ -1505,9 +1505,9 @@ body.combat #aoe-layer { display:block; }
     <div class="ib-corner ib-br"></div>
     <div class="ib-ornament">⚔ &nbsp; ✦ &nbsp; ⚔</div>
     <div class="ib-rule"></div>
-    <div class="ib-title">DooM<br>THEATRE</div>
+    <div class="ib-title">MONOMYTH<br>VTT</div>
     <div class="ib-rule"></div>
-    <p class="ib-sub">Theatre &nbsp;of &nbsp;the &nbsp;Mind</p>
+    <p class="ib-sub">Virtual &nbsp;Tabletop &nbsp;RPG</p>
     <div class="ib-ornament" style="margin-top:14px;margin-bottom:0">⚔ &nbsp; ✦ &nbsp; ⚔</div>
   </div>
 </div>
@@ -1590,7 +1590,7 @@ const CFG = { peerHost:'peerjs.ftplimits.xyz', peerPort:443, peerPath:'/peerjs',
 let S = { dmAltAvatar:null,
   backdrop:null, dmAvatar:null, dmName:null, dmFlipped:false,
   players:[], npcs:[],
-  combatMode:false, weather:null, nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[], textItems:[], handoutLog:[],
+  combatMode:false, weather:'dust', nightMode:false, dmTorch:true, aoeShapes:[], drawStrokes:[], textItems:[], handoutLog:[],
   dmDiscordId: null,
   library:{ backdrops:[], players:[], npcs:[], handouts:[] }
 };
@@ -1857,7 +1857,7 @@ async function startDiscordSession(instanceId) {
   const cfg = getDiscordPeerConfig();
 
   setStatus('Connecting…');
-  console.log('[DooM Theatre] roomCode:', roomCode, '| PeerJS config:', JSON.stringify(cfg));
+  console.log('[Monomyth VTT] roomCode:', roomCode, '| PeerJS config:', JSON.stringify(cfg));
 
   // SDK init runs in parallel with PeerJS setup — whichever finishes first is fine
   const sdkPromise = initDiscordSDK();
@@ -1867,7 +1867,7 @@ async function startDiscordSession(instanceId) {
 
   myPeer.on('open', async id => {
     isHost = true;
-    console.log('[DooM Theatre] HOST claimed:', id);
+    console.log('[Monomyth VTT] HOST claimed:', id);
     el('toolbar').style.display='flex'; // host sees toolbar
 
     // Tag DM frame with Discord ID so speaking highlights it — store in S so guests sync it.
@@ -1885,18 +1885,18 @@ async function startDiscordSession(instanceId) {
 
   myPeer.on('error', async err => {
     if(err.type === 'unavailable-id') {
-      console.log('[DooM Theatre] GUEST — connecting to host at:', roomCode);
+      console.log('[Monomyth VTT] GUEST — connecting to host at:', roomCode);
       myPeer.destroy();
 
       const user = await withTimeout(sdkPromise, 15000, null);
 
       myPeer = new Peer(cfg);
       myPeer.on('open', guestId => {
-        console.log('[DooM Theatre] GUEST peer id:', guestId);
+        console.log('[Monomyth VTT] GUEST peer id:', guestId);
         hostConn = myPeer.connect(roomCode, { reliable: true });
         wireConn(hostConn, false);
         hostConn.on('open', () => {
-          console.log('[DooM Theatre] GUEST hostConn opened — sending discord_identity, user:', user?.username || 'null');
+          console.log('[Monomyth VTT] GUEST hostConn opened — sending discord_identity, user:', user?.username || 'null');
           setStatus('Connected', 'connected');
           if(user) {
             hostConn.send({ type:'discord_identity',
@@ -1905,15 +1905,15 @@ async function startDiscordSession(instanceId) {
               avatarHash: user.avatar || null,
             });
           } else {
-            console.warn('[DooM Theatre] GUEST has no identity to send — will appear as Unknown Player');
+            console.warn('[Monomyth VTT] GUEST has no identity to send — will appear as Unknown Player');
           }
         });
-        hostConn.on('error', e => { setStatus('Join failed', 'error'); console.error('[DooM Theatre] GUEST hostConn error:', e); });
+        hostConn.on('error', e => { setStatus('Join failed', 'error'); console.error('[Monomyth VTT] GUEST hostConn error:', e); });
       });
-      myPeer.on('error', e => { setStatus('PeerJS error: ' + e.type, 'error'); console.error('[DooM Theatre] GUEST peer error:', e); });
+      myPeer.on('error', e => { setStatus('PeerJS error: ' + e.type, 'error'); console.error('[Monomyth VTT] GUEST peer error:', e); });
     } else {
       setStatus('PeerJS error: ' + err.type, 'error');
-      console.error('[DooM Theatre] PeerJS error:', err);
+      console.error('[Monomyth VTT] PeerJS error:', err);
     }
   });
 }
@@ -1930,7 +1930,7 @@ function makePeer(id) {
 function handleIncomingConnection(conn) {
   const entry = { conn, identity: null };
   pendingConns.set(conn.peer, entry);
-  console.log('[DooM Theatre] HOST incoming connection from peer:', conn.peer);
+  console.log('[Monomyth VTT] HOST incoming connection from peer:', conn.peer);
   conn.once('data', data => {
     if(data?.type === 'discord_identity') {
       entry.identity = { username: data.username, discordUserId: data.discordUserId };
@@ -1945,7 +1945,7 @@ function handleIncomingConnection(conn) {
 }
 function admitConn(peerId) {
   const entry = pendingConns.get(peerId); if(!entry) return;
-  console.log('[DooM Theatre] HOST admitting peer:', peerId, '| identity:', entry.identity?.username || 'none');
+  console.log('[Monomyth VTT] HOST admitting peer:', peerId, '| identity:', entry.identity?.username || 'none');
   pendingConns.delete(peerId);
   renderJoinRequests();
   const conn = entry.conn;
@@ -1953,11 +1953,11 @@ function admitConn(peerId) {
   wireConn(conn, true);
   if(entry.identity) discordPeers.set(conn.peer, entry.identity);
   const sendInitialState = () => {
-    console.log('[DooM Theatre] HOST sending full_state to:', peerId);
+    console.log('[Monomyth VTT] HOST sending full_state to:', peerId);
     conn.send({ type:'full_state', state:S });
     if(musicCurrentFile) conn.send({type:'music_play', file:musicCurrentFile, time:musicAudio.currentTime});
   };
-  if(conn.open) sendInitialState(); else { console.warn('[DooM Theatre] HOST conn not open yet, waiting for open event'); conn.once('open', sendInitialState); }
+  if(conn.open) sendInitialState(); else { console.warn('[Monomyth VTT] HOST conn not open yet, waiting for open event'); conn.once('open', sendInitialState); }
   setPeerCount();
   updatePeerList();
   setStatus(`${guestConns.length} connected`, 'connected');
@@ -2007,8 +2007,8 @@ function broadcast(msg,exc) { guestConns.forEach(c=>{ if(c!==exc&&c.open) c.send
 // ── MESSAGES ─────────────────────────────────────────────────────
 function handleMsg(msg,fromConn) {
   switch(msg.type) {
-    case 'full_state':    S=msg.state; receivedFullState=true; console.log('[DooM Theatre] GUEST full_state received, players:', S.players.length, 'npcs:', S.npcs.length); renderAll(); if(S.nightMode) applyNight(true); hideLoadingOverlay(); break;
-    case 'join_denied':   console.warn('[DooM Theatre] GUEST join was denied by host'); setStatus('Join request denied by host', 'error'); hideLoadingOverlay(); break;
+    case 'full_state':    S=msg.state; receivedFullState=true; console.log('[Monomyth VTT] GUEST full_state received, players:', S.players.length, 'npcs:', S.npcs.length); renderAll(); if(S.nightMode) applyNight(true); hideLoadingOverlay(); break;
+    case 'join_denied':   console.warn('[Monomyth VTT] GUEST join was denied by host'); setStatus('Join request denied by host', 'error'); hideLoadingOverlay(); break;
     case 'set_backdrop':  S.backdrop=msg.url; renderBackdrop(); if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_name': S.dmName=msg.name; el('dm-label').textContent=msg.name; if(isHost) broadcast(msg,fromConn); break;
     case 'set_dm_avatar': S.dmAvatar=msg.url; S.dmName=msg.name||null; renderDmAvatar(); if(isHost) broadcast(msg,fromConn); break;
@@ -3958,7 +3958,7 @@ function scheduleFlip() {
     // but no instance_id arrived in the URL — Discord failed to pass session info correctly.
     // Showing the dev test panel here would be actively misleading, since clicking Host/Join
     // manually just creates an isolated room disconnected from everyone else's real session.
-    console.error('[DooM Theatre] In an iframe but no instance_id found in URL — Discord did not deliver session info correctly.');
+    console.error('[Monomyth VTT] In an iframe but no instance_id found in URL — Discord did not deliver session info correctly.');
     const ov = el('loading-overlay');
     if(ov) {
       ov.classList.remove('hidden');
@@ -5135,7 +5135,7 @@ function scheduleFlip() {
       const jsonStr = JSON.stringify(S, safe, 2);
       const blob=new Blob([jsonStr],{type:'application/json'});
       const url=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=url; a.download='doomtheatre-save.json'; a.click();
+      const a=document.createElement('a'); a.href=url; a.download='monomyth-save.json'; a.click();
       URL.revokeObjectURL(url);
     } catch(err){ alert('Save failed: '+err.message); }
   });
