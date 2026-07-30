@@ -335,12 +335,28 @@ body.panel-open #volume-bar { right:294px; }
 #av-cancel { background:rgba(20,12,4,.7); border:1px solid var(--border); color:var(--text-dim); }
 
 /* ── HANDOUT ── */
-#handout-overlay { position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:500; display:none; align-items:center; justify-content:center; cursor:pointer; }
+#handout-overlay { position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:500; display:none; align-items:center; justify-content:center; }
 #handout-overlay.visible { display:flex; }
-#handout-box { position:relative; max-width:72vw; max-height:82vh; border:2px solid var(--gold-dim); border-radius:8px; overflow:hidden; box-shadow:0 0 60px rgba(0,0,0,.8); animation:pop-in .3s cubic-bezier(.34,1.56,.64,1) both; cursor:default; pointer-events:all; }
-#handout-box img { display:block; max-width:72vw; max-height:82vh; object-fit:contain; pointer-events:none; }
-#handout-close { position:absolute; top:8px; right:8px; background:rgba(0,0,0,.7); border:1px solid #555; color:#ccc; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; pointer-events:all; }
+#handout-box {
+  position:relative; border:2px solid var(--gold-dim); border-radius:8px;
+  overflow:hidden; box-shadow:0 0 60px rgba(0,0,0,.8);
+  animation:pop-in .3s cubic-bezier(.34,1.56,.64,1) both;
+  width:72vw; height:82vh; cursor:zoom-in;
+  user-select:none;
+}
+#handout-box.zoomed { cursor:grab; }
+#handout-box.zoomed.dragging { cursor:grabbing; }
+#handout-img {
+  display:block; position:absolute;
+  transform-origin:0 0;
+  pointer-events:none;
+  transition:transform .2s ease;
+}
+#handout-img.no-transition { transition:none; }
+#handout-close { position:absolute; top:8px; right:8px; z-index:10; background:rgba(0,0,0,.7); border:1px solid #555; color:#ccc; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; pointer-events:all; }
 #handout-close:hover { background:rgba(139,0,0,.6); }
+#handout-zoom-hint { position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.6); color:var(--text-dim); font-family:'Cinzel',var(--font-display); font-size:9px; letter-spacing:.06em; text-transform:uppercase; padding:3px 10px; border-radius:10px; pointer-events:none; opacity:1; transition:opacity .4s; }
+#handout-zoom-hint.hidden { opacity:0; }
 
 /* ── DICE ROW ── */
 #dice-row { display:flex; gap:4px; align-items:center; }
@@ -449,6 +465,8 @@ body.panel-open #dice-log { right:301px; }
   opacity:0; animation:blood-appear .4s ease forwards;
 }
 @keyframes blood-appear { from{opacity:0;transform:scale(.3)} to{opacity:.88} }
+.blood-spot.fading { animation:blood-fade 3s ease forwards; }
+@keyframes blood-fade { from{opacity:.88} to{opacity:0} }
 
 /* ── MEASURE SVG (inside canvas) ── */
 #measure-svg {
@@ -1639,7 +1657,11 @@ body.combat #aoe-layer { display:block; }
 
 <!-- HANDOUT -->
 <div id="handout-overlay">
-  <div id="handout-box"><button id="handout-close">✕</button><img id="handout-img" src="" alt="Handout"></div>
+  <div id="handout-box">
+    <button id="handout-close">✕</button>
+    <img id="handout-img" src="" alt="Handout">
+    <div id="handout-zoom-hint">Click to zoom · drag to pan · click again to reset</div>
+  </div>
 </div>
 
 <!-- PEER STATUS -->
@@ -1712,17 +1734,32 @@ function updatePeerList() {
 function setPeerCount()   { const p=el('tp-peers'); if(p) p.textContent=`Peers: ${guestConns.length}`; }
 
 // ── CANVAS SCALE ─────────────────────────────────────────────────
+let canvasZoom = 1; // 1 = normal, 2 = zoomed in
+let canvasPanX = 0, canvasPanY = 0; // pan offset in viewport pixels
+
 function updateScale() {
-  const PAD = 14; // breathing room so gold border stays visible on all sides
+  const PAD = 14;
   scale = Math.min((window.innerWidth - PAD*2) / GRID_W, (window.innerHeight - PAD*2) / GRID_H);
-  const offX = (window.innerWidth  - GRID_W * scale) / 2;
-  const offY = (window.innerHeight - GRID_H * scale) / 2;
+  const baseOffX = (window.innerWidth  - GRID_W * scale) / 2;
+  const baseOffY = (window.innerHeight - GRID_H * scale) / 2;
   const c = el('canvas');
-  c.style.transform = `scale(${scale})`;
-  c.style.left = offX + 'px';
-  c.style.top  = offY + 'px';
+  c.style.transform = `scale(${scale * canvasZoom})`;
+  c.style.left = (baseOffX + canvasPanX) + 'px';
+  c.style.top  = (baseOffY + canvasPanY) + 'px';
 }
 window.addEventListener('resize', updateScale);
+
+function clampCanvasPan() {
+  // Keep the canvas from panning so far that empty space fills the viewport
+  const scaledW = GRID_W * scale * canvasZoom;
+  const scaledH = GRID_H * scale * canvasZoom;
+  const baseOffX = (window.innerWidth  - GRID_W * scale) / 2;
+  const baseOffY = (window.innerHeight - GRID_H * scale) / 2;
+  const maxPanX = Math.max(0, (scaledW - window.innerWidth)  / 2 + baseOffX);
+  const maxPanY = Math.max(0, (scaledH - window.innerHeight) / 2 + baseOffY);
+  canvasPanX = Math.max(-maxPanX, Math.min(maxPanX, canvasPanX));
+  canvasPanY = Math.max(-maxPanY, Math.min(maxPanY, canvasPanY));
+}
 
 // Convert viewport mouse coords → canvas coords
 function toCanvas(e) {
@@ -2816,16 +2853,44 @@ function exitCombat() {
 }
 
 // ── HANDOUT ──────────────────────────────────────────────────────
-function showHandout(url) {
-  console.log('[Handout] SHOW, overlay display was:', el('handout-overlay').style.display);
-  el('handout-img').src=url;
-  el('handout-overlay').style.display='flex';
+let handoutZoomed = false;
+let handoutPanX = 0, handoutPanY = 0;
+
+function applyHandoutTransform(transition=true) {
+  const img = el('handout-img');
+  img.classList.toggle('no-transition', !transition);
+  const scale = handoutZoomed ? 2 : 1;
+  img.style.transform = `translate(${handoutPanX}px, ${handoutPanY}px) scale(${scale})`;
 }
+
+function fitHandoutImage() {
+  const img = el('handout-img'), box = el('handout-box');
+  handoutZoomed = false; handoutPanX = 0; handoutPanY = 0;
+  img.style.width = box.clientWidth + 'px';
+  img.style.height = box.clientHeight + 'px';
+  img.style.objectFit = 'contain';
+  img.style.objectPosition = 'center';
+  img.style.transform = 'none';
+}
+
+function showHandout(url) {
+  const img = el('handout-img'), box = el('handout-box');
+  handoutZoomed = false; handoutPanX = 0; handoutPanY = 0;
+  img.src = url;
+  box.classList.remove('zoomed','dragging');
+  el('handout-overlay').style.display = 'flex';
+  el('handout-zoom-hint').classList.remove('hidden');
+  // Fit image once loaded (natural size may not be known yet)
+  img.onload = ()=>{ fitHandoutImage(); };
+  if(img.complete && img.naturalWidth) fitHandoutImage();
+  // Auto-hide hint after 3s
+  setTimeout(()=>el('handout-zoom-hint').classList.add('hidden'), 3000);
+}
+
 function dismissHandout() {
-  console.log('[Handout] DISMISS called, display was:', el('handout-overlay').style.display);
-  el('handout-overlay').style.display='none';
+  el('handout-overlay').style.display = 'none';
   el('handout-img').removeAttribute('src');
-  console.log('[Handout] display now:', el('handout-overlay').style.display);
+  handoutZoomed = false; handoutPanX = 0; handoutPanY = 0;
 }
 
 // ── LIBRARIES ────────────────────────────────────────────────────
@@ -4834,15 +4899,140 @@ function scheduleFlip() {
 
   // Handout
   // Handout — click background or close button to dismiss; Escape key also works
+  // ── HANDOUT ZOOM + PAN ───────────────────────────────────────────
+  const hBox = el('handout-box');
   el('handout-overlay').addEventListener('click', e=>{
-    console.log('[Handout] overlay click | target:', e.target.id||e.target.tagName, '| isOverlay:', e.target===el('handout-overlay'));
-    if(e.target === el('handout-overlay')) { e.stopPropagation(); dismissHandout(); } // local only
+    if(e.target === el('handout-overlay')) { dismissHandout(); }
   });
-  el('handout-close').addEventListener('click', e=>{
-    console.log('[Handout] close btn clicked');
-    e.stopPropagation(); dismissHandout(); // local only
+  el('handout-close').addEventListener('click', e=>{ e.stopPropagation(); dismissHandout(); });
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape' && el('handout-overlay').style.display==='flex') dismissHandout();
   });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && el('handout-overlay').style.display==='flex'){ console.log('[Handout] Escape'); dismissHandout(); } }); // local only
+
+  let hDragging=false, hDragStartX=0, hDragStartY=0, hPanStartX=0, hPanStartY=0, hMoved=false;
+
+  hBox.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    e.preventDefault(); hBox.setPointerCapture(e.pointerId);
+    hDragging=true; hMoved=false;
+    hDragStartX=e.clientX; hDragStartY=e.clientY;
+    hPanStartX=handoutPanX; hPanStartY=handoutPanY;
+    if(handoutZoomed) hBox.classList.add('dragging');
+  });
+
+  hBox.addEventListener('pointermove', e=>{
+    if(!hDragging || !handoutZoomed) return;
+    const dx=e.clientX-hDragStartX, dy=e.clientY-hDragStartY;
+    if(Math.hypot(dx,dy)>4) hMoved=true;
+    if(hMoved){
+      // Clamp pan so image doesn't wander off screen entirely
+      const box=hBox.getBoundingClientRect();
+      const maxPan = box.width * 0.5; // generous clamp — half box width in any direction
+      handoutPanX = Math.max(-maxPan, Math.min(maxPan, hPanStartX+dx));
+      handoutPanY = Math.max(-maxPan, Math.min(maxPan, hPanStartY+dy));
+      applyHandoutTransform(false);
+    }
+  });
+
+  hBox.addEventListener('pointerup', e=>{
+    if(!hDragging) return;
+    hDragging=false; hBox.classList.remove('dragging');
+    if(hMoved) return; // was a drag — don't toggle zoom
+    // Click: toggle zoom in/out, reset pan on zoom-out
+    if(!handoutZoomed){
+      // Zoom in centered on click point
+      const r=hBox.getBoundingClientRect();
+      const cx=e.clientX-r.left-r.width/2, cy=e.clientY-r.top-r.height/2;
+      handoutPanX = -cx * 0.5; // offset so clicked point stays roughly centered
+      handoutPanY = -cy * 0.5;
+      handoutZoomed=true; hBox.classList.add('zoomed');
+    } else {
+      handoutZoomed=false; handoutPanX=0; handoutPanY=0;
+      hBox.classList.remove('zoomed');
+    }
+    applyHandoutTransform(true);
+  });
+
+  // ── CANVAS ZOOM + PAN (left click on empty canvas) ───────────────
+  {
+    let cvDragging=false, cvMoved=false;
+    let cvDragStartX=0, cvDragStartY=0, cvPanStartX=0, cvPanStartY=0;
+
+    // Add transition only for zoom toggle clicks, not for pan movement
+    const cvEl = el('canvas');
+    function setCvTransition(on) {
+      cvEl.style.transition = on ? 'transform .2s ease, left .2s ease, top .2s ease' : 'none';
+    }
+
+    document.addEventListener('pointerdown', e=>{
+      if(e.button!==0) return;
+      // Only intercept clicks that land directly on the canvas backdrop —
+      // anything that hits a real interactive element lets that element handle it
+      const hit = document.elementFromPoint(e.clientX, e.clientY);
+      const passThrough = hit && hit.closest(
+        '.av-wrap,.ca-wrap,.av-frame,.ca-frame,#dm-avatar-wrap,'+
+        '#toolbar,#ctx-menu,#bottom-bar,#aoe-layer,.text-item,'+
+        '#dm-screen,#music-panel,#volume-bar,#hotkey-bar,#help-wrap,'+
+        '.join-req-row,#handout-overlay,#join-requests,#death-popup,'+
+        '#dice-ctx,#system-menu,#hotkey-ctx-menu,#hotkey-edit-prompt,'+
+        '#confirm-prompt,#rename-prompt,#init-prompt,#cursor-menu'
+      );
+      if(passThrough) return;
+      if(aoeActive || document.body.classList.contains('draw-mode') || textToolActive) return;
+
+      e.preventDefault();
+      cvDragging=true; cvMoved=false;
+      cvDragStartX=e.clientX; cvDragStartY=e.clientY;
+      cvPanStartX=canvasPanX; cvPanStartY=canvasPanY;
+      if(canvasZoom>1) document.body.style.cursor='grabbing';
+    }, {capture:true});
+
+    document.addEventListener('pointermove', e=>{
+      if(!cvDragging || canvasZoom===1) return;
+      const dx=e.clientX-cvDragStartX, dy=e.clientY-cvDragStartY;
+      if(Math.hypot(dx,dy)>4) cvMoved=true;
+      if(cvMoved){
+        canvasPanX=cvPanStartX+dx; canvasPanY=cvPanStartY+dy;
+        clampCanvasPan();
+        setCvTransition(false);
+        updateScale();
+      }
+    });
+
+    document.addEventListener('pointerup', e=>{
+      if(!cvDragging) return;
+      cvDragging=false;
+      document.body.style.cursor='';
+      if(cvMoved) return; // was a pan drag — don't toggle zoom
+      // Toggle zoom centered on click point
+      setCvTransition(true);
+      if(canvasZoom===1){
+        // Zoom in: shift pan so the clicked point stays under the cursor
+        const r=cvEl.getBoundingClientRect();
+        const clickedCanvasX=(e.clientX-r.left);
+        const clickedCanvasY=(e.clientY-r.top);
+        canvasPanX -= clickedCanvasX * 0.5;
+        canvasPanY -= clickedCanvasY * 0.5;
+        canvasZoom=2;
+        clampCanvasPan();
+      } else {
+        canvasZoom=1; canvasPanX=0; canvasPanY=0;
+      }
+      updateScale();
+      // Clear transition after it completes
+      setTimeout(()=>setCvTransition(false), 250);
+    });
+
+    // Escape to reset zoom
+    document.addEventListener('keydown', e=>{
+      if(e.key==='Escape' && canvasZoom>1){
+        canvasZoom=1; canvasPanX=0; canvasPanY=0;
+        setCvTransition(true);
+        updateScale();
+        setTimeout(()=>setCvTransition(false), 250);
+      }
+    });
+  }
 
   // DM Screen uploads
   document.querySelectorAll('.upload-btn').forEach(btn=>btn.addEventListener('click',()=>el('upload-'+btn.dataset.cat).click()));
@@ -5125,6 +5315,7 @@ function scheduleFlip() {
   function spawnBlood(cx, cy) {
     const layer = el('blood-layer');
     const count = 5 + Math.floor(Math.random()*5);
+    const spots = [];
     for(let i=0; i<count; i++){
       const spot = document.createElement('div');
       spot.className = 'blood-spot';
@@ -5139,7 +5330,13 @@ function scheduleFlip() {
       spot.style.transform = `rotate(${Math.random()*360}deg)`;
       spot.style.animationDelay = (i*0.04)+'s';
       layer.appendChild(spot);
+      spots.push(spot);
     }
+    // After 10s start a 3s fade, then remove from DOM
+    setTimeout(()=>{
+      spots.forEach(s=>s.classList.add('fading'));
+      setTimeout(()=>spots.forEach(s=>s.remove()), 3100);
+    }, 10000);
   }
 
   function clearBlood() { el('blood-layer').innerHTML=''; }
