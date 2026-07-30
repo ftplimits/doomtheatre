@@ -1237,7 +1237,9 @@ body.combat #aoe-layer { display:block; }
   <div id="help-tooltip">
     <div class="help-title">Quick Tips</div>
     <div class="help-row"><span class="help-key">🖱️ Middle-click</span>Ping a spot on the map</div>
-    <div class="help-row"><span class="help-key">🔄 Double-click</span>Flip an avatar to face the other way</div>
+    <div class="help-row"><span class="help-key">🔄 Double-click avatar</span>Flip an avatar to face the other way</div>
+    <div class="help-row"><span class="help-key">🔍 Double-click canvas</span>Zoom in 2× · drag to pan · double-click again to zoom out</div>
+    <div class="help-row"><span class="help-key">🖼 Double-click handout</span>Zoom in 2× · drag to pan · double-click again to zoom out</div>
     <div class="help-row"><span class="help-key">📐 AoE Shapes</span>Pick a shape, drag to place, right-click to remove</div>
     <div class="help-row"><span class="help-key">🔊 Music &amp; Effects</span>Two independent sliders, top-right</div>
     <div class="help-row"><span class="help-key">🎲 Dice Tray</span>Click to roll · scroll to set modifier · right-click for count/advantage</div>
@@ -1740,23 +1742,29 @@ let canvasPanX = 0, canvasPanY = 0; // pan offset in viewport pixels
 function updateScale() {
   const PAD = 14;
   scale = Math.min((window.innerWidth - PAD*2) / GRID_W, (window.innerHeight - PAD*2) / GRID_H);
-  const baseOffX = (window.innerWidth  - GRID_W * scale) / 2;
-  const baseOffY = (window.innerHeight - GRID_H * scale) / 2;
   const c = el('canvas');
+  // Transform-origin:0 0 — we position the top-left corner and scale from there
+  // Pan offsets are applied directly as left/top adjustments
+  const visW = GRID_W * scale * canvasZoom;
+  const visH = GRID_H * scale * canvasZoom;
+  const centreX = (window.innerWidth  - visW) / 2;
+  const centreY = (window.innerHeight - visH) / 2;
+  c.style.transformOrigin = '0 0';
   c.style.transform = `scale(${scale * canvasZoom})`;
-  c.style.left = (baseOffX + canvasPanX) + 'px';
-  c.style.top  = (baseOffY + canvasPanY) + 'px';
+  c.style.left = (centreX + canvasPanX) + 'px';
+  c.style.top  = (centreY + canvasPanY) + 'px';
 }
 window.addEventListener('resize', updateScale);
 
 function clampCanvasPan() {
-  // Keep the canvas from panning so far that empty space fills the viewport
-  const scaledW = GRID_W * scale * canvasZoom;
-  const scaledH = GRID_H * scale * canvasZoom;
-  const baseOffX = (window.innerWidth  - GRID_W * scale) / 2;
-  const baseOffY = (window.innerHeight - GRID_H * scale) / 2;
-  const maxPanX = Math.max(0, (scaledW - window.innerWidth)  / 2 + baseOffX);
-  const maxPanY = Math.max(0, (scaledH - window.innerHeight) / 2 + baseOffY);
+  // At zoom>1 the canvas fills more than the viewport; clamp so user can't pan past any edge.
+  // With transform-origin:0 0 the canvas occupies [left → left+visW, top → top+visH].
+  // centreX = (viewport - visW)/2. When canvasPanX=0 the canvas is centred.
+  // Max pan in either direction = (visW - viewportW) / 2 (how far the canvas overflows each side)
+  const visW = GRID_W * scale * canvasZoom;
+  const visH = GRID_H * scale * canvasZoom;
+  const maxPanX = Math.max(0, (visW - window.innerWidth)  / 2);
+  const maxPanY = Math.max(0, (visH - window.innerHeight) / 2);
   canvasPanX = Math.max(-maxPanX, Math.min(maxPanX, canvasPanX));
   canvasPanY = Math.max(-maxPanY, Math.min(maxPanY, canvasPanY));
 }
@@ -4925,11 +4933,11 @@ function scheduleFlip() {
     const dx=e.clientX-hDragStartX, dy=e.clientY-hDragStartY;
     if(Math.hypot(dx,dy)>4) hMoved=true;
     if(hMoved){
-      // Clamp pan so image doesn't wander off screen entirely
-      const box=hBox.getBoundingClientRect();
-      const maxPan = box.width * 0.5; // generous clamp — half box width in any direction
-      handoutPanX = Math.max(-maxPan, Math.min(maxPan, hPanStartX+dx));
-      handoutPanY = Math.max(-maxPan, Math.min(maxPan, hPanStartY+dy));
+      // At 2x with transform-origin:0 0: image spans [panX → panX+2W, panY → panY+2H]
+      // Valid pan range: X∈[-W,0], Y∈[-H,0] to stay in-bounds
+      const W=hBox.clientWidth, H=hBox.clientHeight;
+      handoutPanX = Math.max(-W, Math.min(0, hPanStartX+dx));
+      handoutPanY = Math.max(-H, Math.min(0, hPanStartY+dy));
       applyHandoutTransform(false);
     }
   });
@@ -4938,13 +4946,17 @@ function scheduleFlip() {
     if(!hDragging) return;
     hDragging=false; hBox.classList.remove('dragging');
     if(hMoved) return; // was a drag — don't toggle zoom
-    // Click: toggle zoom in/out, reset pan on zoom-out
+    // Double-click only — single clicks just pan while zoomed or do nothing while not zoomed
+    const now=performance.now();
+    const isDouble = (now - (hBox._lastClick||0)) < 350;
+    hBox._lastClick = now;
+    if(!isDouble) return;
     if(!handoutZoomed){
-      // Zoom in centered on click point
       const r=hBox.getBoundingClientRect();
-      const cx=e.clientX-r.left-r.width/2, cy=e.clientY-r.top-r.height/2;
-      handoutPanX = -cx * 0.5; // offset so clicked point stays roughly centered
-      handoutPanY = -cy * 0.5;
+      const W=hBox.clientWidth, H=hBox.clientHeight;
+      const cx=e.clientX-r.left, cy=e.clientY-r.top;
+      handoutPanX = Math.max(-W, Math.min(0, W/2 - cx*2));
+      handoutPanY = Math.max(-H, Math.min(0, H/2 - cy*2));
       handoutZoomed=true; hBox.classList.add('zoomed');
     } else {
       handoutZoomed=false; handoutPanX=0; handoutPanY=0;
@@ -5003,16 +5015,34 @@ function scheduleFlip() {
       if(!cvDragging) return;
       cvDragging=false;
       document.body.style.cursor='';
-      if(cvMoved) return; // was a pan drag — don't toggle zoom
-      // Toggle zoom centered on click point
+      if(cvMoved) return;
+      // Double-click only — single clicks should not trigger zoom
+      const now=performance.now();
+      const cvEl2=el('canvas');
+      const isDouble = (now - (cvEl2._lastClick||0)) < 350;
+      cvEl2._lastClick = now;
+      if(!isDouble) return;
       setCvTransition(true);
       if(canvasZoom===1){
-        // Zoom in: shift pan so the clicked point stays under the cursor
-        const r=cvEl.getBoundingClientRect();
-        const clickedCanvasX=(e.clientX-r.left);
-        const clickedCanvasY=(e.clientY-r.top);
-        canvasPanX -= clickedCanvasX * 0.5;
-        canvasPanY -= clickedCanvasY * 0.5;
+        // With transform-origin:0 0, at current scale the canvas top-left is at centreX,centreY.
+        // The clicked point in viewport is (e.clientX, e.clientY).
+        // After zoom to 2x: canvas will be at (centreX2, centreY2) = ((vp - visW*2)/2, ...)
+        // To keep the clicked point under the cursor we need:
+        //   centreX2 + canvasPanX + (canvasX * 2) = e.clientX
+        //   where canvasX = (e.clientX - centreX) / scale (click in canvas units)
+        // Solving: canvasPanX = e.clientX - centreX2 - 2*(e.clientX - centreX)
+        //        = e.clientX - centreX2 - 2*e.clientX + 2*centreX
+        //        = 2*centreX - centreX2 - e.clientX
+        const visW1 = GRID_W * scale;
+        const visH1 = GRID_H * scale;
+        const visW2 = visW1 * 2;
+        const visH2 = visH1 * 2;
+        const cx1 = (window.innerWidth  - visW1) / 2;
+        const cy1 = (window.innerHeight - visH1) / 2;
+        const cx2 = (window.innerWidth  - visW2) / 2;
+        const cy2 = (window.innerHeight - visH2) / 2;
+        canvasPanX = 2*cx1 - cx2 - e.clientX;
+        canvasPanY = 2*cy1 - cy2 - e.clientY;
         canvasZoom=2;
         clampCanvasPan();
       } else {
